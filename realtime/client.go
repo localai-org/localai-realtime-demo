@@ -14,7 +14,6 @@ import (
 
 type Config struct {
 	WSURL        string
-	HTTPURL      string
 	APIKey       string
 	Model        string
 	Voice        string
@@ -35,9 +34,6 @@ type Client struct {
 func NewClient(cfg Config, registry *Registry, playIn chan<- []byte) *Client {
 	rtConf := openairt.DefaultConfig(cfg.APIKey)
 	rtConf.BaseURL = cfg.WSURL
-	if cfg.HTTPURL != "" {
-		rtConf.APIBaseURL = cfg.HTTPURL
-	}
 	rtConf.HTTPClient = &http.Client{Timeout: cfg.Timeout}
 	return &Client{
 		cfg:      cfg,
@@ -85,7 +81,9 @@ func (c *Client) waitForSession(ctx context.Context) error {
 		}
 		switch msg.ServerEventType() {
 		case openairt.ServerEventTypeError:
-			log.Println("realtime: server error:", msg.(openairt.ErrorEvent).Error.Message)
+			if ev, ok := msg.(openairt.ErrorEvent); ok {
+				log.Println("realtime: server error:", ev.Error.Message)
+			}
 		case openairt.ServerEventTypeSessionCreated, openairt.ServerEventTypeSessionUpdated:
 			return nil
 		}
@@ -158,12 +156,16 @@ func (c *Client) Run(ctx context.Context) error {
 		case openairt.ServerEventTypeInputAudioBufferSpeechStopped:
 			log.Println("realtime: speech stopped")
 		case openairt.ServerEventTypeConversationItemInputAudioTranscriptionCompleted:
-			ev := msg.(openairt.ConversationItemInputAudioTranscriptionCompletedEvent)
-			log.Printf("you said: %s", ev.Transcript)
+			if ev, ok := msg.(openairt.ConversationItemInputAudioTranscriptionCompletedEvent); ok {
+				log.Printf("you said: %s", ev.Transcript)
+			}
 		case openairt.ServerEventTypeResponseCreated:
 			log.Println("realtime: generating response")
 		case openairt.ServerEventTypeResponseOutputAudioDelta:
-			ev := msg.(openairt.ResponseOutputAudioDeltaEvent)
+			ev, ok := msg.(openairt.ResponseOutputAudioDeltaEvent)
+			if !ok {
+				continue
+			}
 			pcm, err := base64.StdEncoding.DecodeString(ev.Delta)
 			if err != nil {
 				log.Println("realtime: decode audio delta:", err)
@@ -175,9 +177,13 @@ func (c *Client) Run(ctx context.Context) error {
 				log.Println("realtime: dropped playback chunk")
 			}
 		case openairt.ServerEventTypeResponseFunctionCallArgumentsDone:
-			c.handleFunctionCall(ctx, msg.(openairt.ResponseFunctionCallArgumentsDoneEvent))
+			if ev, ok := msg.(openairt.ResponseFunctionCallArgumentsDoneEvent); ok {
+				c.handleFunctionCall(ctx, ev)
+			}
 		case openairt.ServerEventTypeError:
-			log.Println("realtime: server error:", msg.(openairt.ErrorEvent).Error.Message)
+			if ev, ok := msg.(openairt.ErrorEvent); ok {
+				log.Println("realtime: server error:", ev.Error.Message)
+			}
 		}
 	}
 }

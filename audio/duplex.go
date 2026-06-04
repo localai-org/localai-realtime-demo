@@ -52,7 +52,11 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, playIn <-
 			out[i] = 0
 		}
 
-		// Capture: copy mic frames and hand off without blocking.
+		// Capture: copy mic frames and hand off without blocking. Unlike the
+		// playback side (where a dropped chunk is just a gap), dropping an
+		// interior mic frame splices discontinuous PCM together, which can
+		// degrade server-side VAD/transcription. We still drop rather than
+		// block the realtime callback; size micOut to make drops rare.
 		chunk := make([]byte, len(in))
 		copy(chunk, in)
 		select {
