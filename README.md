@@ -13,7 +13,9 @@ realtime conversation loop.
 - A C toolchain (`CGO_ENABLED=1`) — the audio layer uses
   [malgo](https://github.com/gen2brain/malgo). On Linux install ALSA headers,
   e.g. `sudo apt install libasound2-dev`.
-- A running LocalAI instance serving a realtime-capable model.
+- A running LocalAI instance serving a realtime-capable model. See
+  [`localai/`](./localai/) for a ready-to-deploy realtime pipeline config
+  (VAD + STT + LLM + TTS) and setup instructions.
 
 ## Build
 
