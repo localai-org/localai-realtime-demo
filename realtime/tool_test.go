@@ -7,7 +7,7 @@ import (
 
 type fakeTool struct{}
 
-func (fakeTool) Name() string       { return "do_thing" }
+func (fakeTool) Name() string        { return "do_thing" }
 func (fakeTool) Description() string { return "does a thing" }
 func (fakeTool) Parameters() any     { return map[string]any{"type": "object"} }
 func (fakeTool) Execute(ctx context.Context, argsJSON string) (string, error) {
