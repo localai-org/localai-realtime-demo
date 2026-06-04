@@ -1,0 +1,4 @@
+/assistant
+/cmd/assistant/assistant
+*.wav
+.DS_Store
