@@ -1,0 +1,5 @@
+# LocalAI installs the gallery sub-models and caches their (large) weights into
+# this directory at runtime. Keep only the committed pipeline config.
+*
+!.gitignore
+!gpt-realtime.yaml

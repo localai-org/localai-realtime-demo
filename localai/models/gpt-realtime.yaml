@@ -1,0 +1,17 @@
+# LocalAI realtime pipeline — used by ../../docker-compose.yml.
+#
+# Wires Voice Activity Detection + Speech-to-Text + LLM + Text-to-Speech into a
+# single model that LocalAI exposes over the realtime WebSocket API at
+#   ws://localhost:8080/v1/realtime?model=gpt-realtime
+#
+# Each value below is the *name* of a gallery model. The compose file installs
+# all four from the gallery on first start (see its `command:`), so this
+# pipeline resolves once they finish downloading.
+name: gpt-realtime
+pipeline:
+  vad: silero-vad-ggml
+  transcription: parakeet-cpp-tdt-0.6b-v3
+  # Small, fast default so `docker compose up` works on a laptop. Swap in any
+  # larger chat model you prefer (and add it to the compose `command:`).
+  llm: qwen3-0.6b
+  tts: qwen3-tts-cpp

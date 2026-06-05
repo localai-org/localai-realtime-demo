@@ -1,0 +1,46 @@
+# Self-contained LocalAI realtime backend for the demo client.
+#
+#   docker compose up
+#
+# Starts LocalAI on http://localhost:8080, installs the four sub-models the
+# realtime pipeline needs (VAD, STT, LLM, TTS) from the gallery on first start,
+# and serves the pipeline at:
+#
+#   ws://localhost:8080/v1/realtime?model=gpt-realtime
+#
+# First start downloads model weights, so give it a few minutes (watch the logs;
+# `/readyz` flips healthy once it's up). Weights are cached in ./localai/models,
+# so later starts are fast. Then run the client from the repo root:
+#
+#   go build -o assistant ./cmd/assistant && ./assistant -model gpt-realtime
+#
+services:
+  localai:
+    # CPU image. For NVIDIA GPUs use localai/localai:latest-gpu-nvidia-cuda-12
+    # (and add a `deploy.resources.reservations.devices` GPU stanza below).
+    image: localai/localai:latest
+    container_name: localai-realtime
+    ports:
+      - "8080:8080"
+    environment:
+      # Set DEBUG=true to watch model loading in detail.
+      - DEBUG=false
+    volumes:
+      # The pipeline config (gpt-realtime.yaml) lives here; the gallery-installed
+      # sub-model configs and their weights are cached here too (git-ignored).
+      - ./localai/models:/models
+    # Positional args install + load these gallery models at startup; the
+    # pipeline references them by name. Swap qwen3-0.6b for a larger chat model
+    # if you have the RAM/VRAM (and update llm: in gpt-realtime.yaml to match).
+    command:
+      - silero-vad-ggml
+      - parakeet-cpp-tdt-0.6b-v3
+      - qwen3-tts-cpp
+      - qwen3-0.6b
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 30s
+    restart: unless-stopped

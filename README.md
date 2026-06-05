@@ -13,9 +13,29 @@ realtime conversation loop.
 - A C toolchain (`CGO_ENABLED=1`) — the audio layer uses
   [malgo](https://github.com/gen2brain/malgo). On Linux install ALSA headers,
   e.g. `sudo apt install libasound2-dev`.
-- A running LocalAI instance serving a realtime-capable model. See
-  [`localai/`](./localai/) for a ready-to-deploy realtime pipeline config
-  (VAD + STT + LLM + TTS) and setup instructions.
+- A running LocalAI instance serving a realtime-capable model. The included
+  [`docker-compose.yml`](./docker-compose.yml) brings one up for you (see
+  [Quick start](#quick-start-docker-compose) below); [`localai/`](./localai/)
+  documents the realtime pipeline config (VAD + STT + LLM + TTS) and how to
+  deploy it on your own instance.
+
+## Quick start (Docker Compose)
+
+Start the LocalAI backend (downloads the four sub-models on first run):
+
+```bash
+docker compose up
+```
+
+Then build and run the client against it — no extra flags needed:
+
+```bash
+CGO_ENABLED=1 go build -o assistant ./cmd/assistant
+./assistant -model gpt-realtime
+```
+
+See [`localai/README.md`](./localai/README.md) for details and how to point the
+client at an existing LocalAI instance instead.
 
 ## Build
 
@@ -28,7 +48,7 @@ CGO_ENABLED=1 go build -o assistant ./cmd/assistant
 ```bash
 ./assistant \
   -ws-url ws://localhost:8080/v1/realtime \
-  -model gpt-4o-realtime-preview
+  -model gpt-realtime
 ```
 
 Then just speak. Server-side VAD detects when you start and stop talking. Ask
