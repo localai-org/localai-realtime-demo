@@ -15,3 +15,16 @@ pipeline:
   # larger chat model you prefer (and add it to the compose `command:`).
   llm: qwen3-0.6b
   tts: qwen3-tts-cpp
+
+  # qwen3-0.6b is a reasoning model that emits <think> blocks — wasteful and
+  # cluttered for a voice assistant. Turn reasoning off for the pipeline's LLM:
+  #
+  # reasoning_effort reaches the backend's chat template (so it works for models
+  # that only honor the effort level, e.g. gpt-oss / LFM2.5) and is merged into
+  # LocalAI, so it works on localai/localai:latest.
+  reasoning_effort: none      # none | minimal | low | medium | high
+  #
+  # Alternative for models that honor the enable_thinking flag (Qwen3 does):
+  # sends enable_thinking=false instead of an effort level. Needs LocalAI
+  # PR #10176 (https://github.com/mudler/LocalAI/pull/10176) merged.
+  # disable_thinking: true
