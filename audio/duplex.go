@@ -59,6 +59,7 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, playIn <-
 	// AEC wiring (playback-ref + off-thread worker). Nil-safe.
 	aecEnabled := aec != nil && aec.Engine != nil
 	var micRing, refRing *Int16Ring
+	var worker *AECWorker
 	if aecEnabled {
 		// ~1s rings at device rate decouple the callback from the worker.
 		micRing = NewInt16Ring(sampleRate)
@@ -75,7 +76,7 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, playIn <-
 		// maxBytesPerCall matches the worker's 20ms batch (deviceRate/50).
 		batchBytes := (sampleRate / 50) * 2
 		proc := NewLocalVQEProcessor(aec.Engine, sampleRate, batchBytes)
-		NewAECWorker(ctx, proc, micRing, refRing, sampleRate, sampleRate, chanWriter{ch: micOut}, nil)
+		worker = NewAECWorker(ctx, proc, micRing, refRing, sampleRate, sampleRate, chanWriter{ch: micOut}, nil)
 	}
 
 	// Reusable scratch for converting callback buffers to int16 (AEC path).
@@ -150,5 +151,10 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, playIn <-
 	}
 
 	<-ctx.Done()
+	// Wait for the AEC worker to stop before returning so the caller can safely
+	// free the LocalVQE engine without racing a mid-drain inference.
+	if worker != nil {
+		<-worker.Done()
+	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -22,6 +23,15 @@ var _ audio.LocalVQEEngine = (*localvqe.LocalVQE)(nil)
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return def
 }
@@ -50,7 +60,7 @@ func main() {
 	aecEnabled := flag.Bool("aec", envBool("AEC", true), "enable LocalVQE acoustic echo cancellation when the library and model are available")
 	localvqeLib := flag.String("localvqe-lib", env("LOCALVQE_LIB", "liblocalvqe.so"), "path to liblocalvqe.so")
 	localvqeModel := flag.String("localvqe-model", env("LOCALVQE_MODEL", ""), "path to the LocalVQE GGUF model")
-	aecDelayMs := flag.Int("aec-delay-ms", 50, "AEC reference delay in ms (speaker->mic acoustic path)")
+	aecDelayMs := flag.Int("aec-delay-ms", envInt("AEC_DELAY_MS", 50), "AEC reference delay in ms (speaker->mic acoustic path)")
 	flag.Parse()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -62,6 +72,7 @@ func main() {
 	// Optional acoustic echo cancellation. On any setup problem we log once and
 	// fall back to passthrough rather than failing the session.
 	var aecOpts *audio.AECOptions
+	var aecEngine *localvqe.LocalVQE
 	if *aecEnabled {
 		switch {
 		case *localvqeModel == "":
@@ -71,7 +82,7 @@ func main() {
 			if err != nil {
 				log.Printf("aec: disabled (%v)", err)
 			} else {
-				defer engine.Close()
+				aecEngine = engine
 				aecOpts = &audio.AECOptions{Engine: engine, DelayMs: *aecDelayMs}
 				log.Printf("aec: enabled (lib=%s model=%s delay=%dms)", *localvqeLib, *localvqeModel, *aecDelayMs)
 			}
@@ -79,12 +90,23 @@ func main() {
 	}
 
 	// Audio device runs for the lifetime of the session.
+	audioDone := make(chan struct{})
 	go func() {
+		defer close(audioDone)
 		if err := audio.Duplex(ctx, *sampleRate, micOut, playIn, aecOpts); err != nil {
 			log.Println("audio:", err)
 			cancel()
 		}
 	}()
+	// Free the LocalVQE engine only after Duplex (and its AEC worker) have
+	// stopped, so a worker mid-drain can never touch a freed context on exit.
+	if aecEngine != nil {
+		defer func() {
+			cancel()
+			<-audioDone
+			aecEngine.Close()
+		}()
+	}
 
 	// Tools.
 	registry := realtime.NewRegistry()
