@@ -78,3 +78,35 @@ it in `cmd/assistant/main.go`.
 - `realtime/` — WebSocket client, session setup, event loop, tool registry
 - `tools/` — the `get_weather` example
 - `cmd/assistant/` — CLI entry point
+
+## Echo cancellation (optional)
+
+In a voice session the assistant's speech plays on your speakers and the open
+mic re-captures it, which causes self-echo and makes the assistant interrupt
+itself. The client can remove its own voice from the mic with
+[LocalVQE](https://github.com/localai-org/LocalVQE) neural acoustic echo
+cancellation (16 kHz, runs on the CPU, no cgo - loaded via `purego`).
+
+`make` (or `make build`) produces a **self-contained binary** with the LocalVQE
+library and the compact 1.3M model **bundled in** (via `go:embed`). AEC is then
+on automatically with no flags, no env vars, and no runtime files - at startup
+the embedded assets are extracted to a content-hashed cache dir and loaded.
+
+```bash
+make            # builds liblocalvqe.so, downloads the model, bundles both in
+./bin/assistant # AEC on automatically
+```
+
+There are no library or model path options. To bundle a different model, rebuild:
+
+```bash
+make build LOCALVQE_MODEL_FILE=localvqe-v1.3-4.8M-f32.gguf
+```
+
+A plain `go build` (or `make build-noembed`) bundles nothing, so AEC is simply
+**disabled** and the mic passes through untouched (logged once at startup). Two
+knobs remain: `-aec` (force it off) and `-aec-delay-ms` (reference delay, default
+50).
+
+This removes only the assistant's own voice; genuine speech still reaches the
+server's VAD, so you can still interrupt the assistant by talking (barge-in).
