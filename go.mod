@@ -8,6 +8,9 @@ require (
 	github.com/sashabaranov/go-openai v1.41.2
 )
 
-require github.com/coder/websocket v1.8.12 // indirect
+require (
+	github.com/coder/websocket v1.8.12 // indirect
+	github.com/ebitengine/purego v0.10.1 // indirect
+)
 
 replace github.com/WqyJh/go-openai-realtime/v2 => github.com/richiejp/go-openai-realtime/v2 v2.0.0-20260213113003-1b6db572709e
