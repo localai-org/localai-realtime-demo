@@ -44,9 +44,7 @@ services:
       - silero-vad-ggml
       - parakeet-cpp-tdt-0.6b-v3
       - gemma-4-e2b-it-qat-q4_0
-      - lfm2.5-8b-a1b
       - voice-it-paola-medium
-      - qwen3-tts-cpp
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
       interval: 15s
