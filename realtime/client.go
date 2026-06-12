@@ -18,6 +18,7 @@ type Config struct {
 	Model        string
 	Voice        string
 	Instructions string
+	Language     string // ISO-639-1 input-audio language (empty = server auto-detect)
 	SampleRate   int
 	Timeout      time.Duration
 }
@@ -95,6 +96,12 @@ func (c *Client) updateSession(ctx context.Context) error {
 	if c.cfg.Voice != "" {
 		voice = openairt.Voice(c.cfg.Voice)
 	}
+	// Forcing the input language helps the STT model when the spoken language is
+	// known; left empty the server (e.g. parakeet) auto-detects.
+	var transcription *openairt.AudioTranscription
+	if c.cfg.Language != "" {
+		transcription = &openairt.AudioTranscription{Language: c.cfg.Language}
+	}
 	return c.conn.SendMessage(ctx, openairt.SessionUpdateEvent{
 		EventBase: openairt.EventBase{EventID: "session-init"},
 		Session: openairt.SessionUnion{
@@ -108,6 +115,7 @@ func (c *Client) updateSession(ctx context.Context) error {
 						TurnDetection: &openairt.TurnDetectionUnion{
 							ServerVad: &openairt.ServerVad{},
 						},
+						Transcription: transcription,
 					},
 					Output: &openairt.SessionAudioOutput{
 						Voice: voice,

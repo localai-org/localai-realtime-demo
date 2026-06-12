@@ -26,6 +26,7 @@ func main() {
 	apiKey := flag.String("api-key", env("OPENAI_API_KEY", "sk-xxx"), "API key (LocalAI ignores it)")
 	model := flag.String("model", env("ASSISTANT_MODEL", "gpt-4o-realtime-preview"), "realtime model name served by LocalAI")
 	voice := flag.String("voice", env("ASSISTANT_VOICE", ""), "TTS voice (empty = server default)")
+	language := flag.String("language", env("ASSISTANT_LANGUAGE", ""), "input audio language as ISO-639-1, e.g. en/it (empty = auto-detect)")
 	instructions := flag.String("instructions", env("ASSISTANT_INSTRUCTIONS",
 		"You are a helpful voice assistant. Keep replies short and conversational. Use the get_weather tool when the user asks about the weather."),
 		"system instructions")
@@ -61,6 +62,7 @@ func main() {
 		Model:        *model,
 		Voice:        *voice,
 		Instructions: *instructions,
+		Language:     *language,
 		SampleRate:   *sampleRate,
 		Timeout:      30 * time.Second,
 	}, registry, playIn)

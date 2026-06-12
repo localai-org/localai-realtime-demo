@@ -63,6 +63,7 @@ calls the tool, gets canned data back, and speaks the result.
 | `-api-key`      | `OPENAI_API_KEY`         | `sk-xxx` (LocalAI ignores it)      |
 | `-model`        | `ASSISTANT_MODEL`        | `gpt-4o-realtime-preview`          |
 | `-voice`        | `ASSISTANT_VOICE`        | server default                     |
+| `-language`     | `ASSISTANT_LANGUAGE`     | auto-detect (ISO-639-1, e.g. `it`) |
 | `-instructions` | `ASSISTANT_INSTRUCTIONS` | short helpful-assistant prompt     |
 | `-sample-rate`  | —                        | `24000`                            |
 
