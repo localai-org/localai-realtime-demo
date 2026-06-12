@@ -32,7 +32,7 @@ services:
     volumes:
       # The pipeline config (gpt-realtime.yaml) lives here; the gallery-installed
       # sub-model configs and their weights are cached here too (git-ignored).
-      - ./localai/models:/models
+      - ./localai/models:/models:z
     # Positional args install + load these gallery models at startup; the
     # pipeline (gpt-realtime.yaml) references them by name. Defaults match the
     # wingman stack: gemma-4-e2b for the LLM (honors reasoning_effort: none, so
