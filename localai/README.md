@@ -8,8 +8,12 @@ models into one endpoint:
 |-----------------|------------------------------|-----------------------------|
 | `vad`           | `silero-vad-ggml`            | detect when the user speaks |
 | `transcription` | `parakeet-cpp-tdt-0.6b-v3`   | speech → text               |
-| `llm`           | `qwen3-0.6b`                 | generate the reply          |
-| `tts`           | `qwen3-tts-cpp`              | text → speech               |
+| `llm`           | `gemma-4-e2b-it-qat-q4_0`    | generate the reply          |
+| `tts`           | `voice-it-paola-medium`      | text → speech (piper)       |
+
+The compose file also installs `lfm2.5-8b-a1b` (a larger chat LLM) and
+`qwen3-tts-cpp` (a neural multilingual voice) as heavier swap-in options —
+point `llm:`/`tts:` in `gpt-realtime.yaml` at them to use them.
 
 LocalAI then serves it at:
 
@@ -20,7 +24,7 @@ ws://localhost:8080/v1/realtime?model=gpt-realtime
 ## Quick start (Docker Compose)
 
 From the repo root, the included [`docker-compose.yml`](../docker-compose.yml)
-brings the whole backend up and installs the four sub-models for you:
+brings the whole backend up and installs the sub-models for you:
 
 ```bash
 docker compose up
@@ -49,7 +53,7 @@ needed against the compose stack.
 ## Using your own LocalAI instance
 
 If you already run LocalAI elsewhere, you don't need the compose file — just
-make the four sub-models available and deploy the pipeline config.
+make the sub-models available and deploy the pipeline config.
 
 ### Install the sub-models
 
@@ -60,14 +64,15 @@ poll at `/models/jobs/<uuid>`):
 ```bash
 BASE=http://<host>:<port>/v1   # add -H "Authorization: Bearer $KEY" if auth is on
 
-for id in silero-vad-ggml parakeet-cpp-tdt-0.6b-v3 qwen3-tts-cpp qwen3-0.6b; do
+for id in silero-vad-ggml parakeet-cpp-tdt-0.6b-v3 gemma-4-e2b-it-qat-q4_0 voice-it-paola-medium; do
   curl -sS "$BASE/models/apply" -H 'Content-Type: application/json' -d "{\"id\":\"$id\"}"
   echo
 done
 ```
 
 Swap in any chat model you prefer by editing the `llm:` field in
-`models/gpt-realtime.yaml` (and installing that model instead of `qwen3-0.6b`).
+`models/gpt-realtime.yaml` (and installing that model instead of
+`gemma-4-e2b-it-qat-q4_0`).
 
 ### Deploy the pipeline config
 

@@ -5,23 +5,28 @@
 #   ws://localhost:8080/v1/realtime?model=gpt-realtime
 #
 # Each value below is the *name* of a gallery model. The compose file installs
-# all four from the gallery on first start (see its `command:`), so this
-# pipeline resolves once they finish downloading.
+# them from the gallery on first start (see its `command:`), so this pipeline
+# resolves once they finish downloading.
 name: gpt-realtime
 pipeline:
   vad: silero-vad-ggml
   transcription: parakeet-cpp-tdt-0.6b-v3
-  # Small, fast default so `docker compose up` works on a laptop. Swap in any
-  # larger chat model you prefer (and add it to the compose `command:`).
-  llm: qwen3-0.6b
-  tts: qwen3-tts-cpp
+  # Fast laptop-friendly defaults, matching the wingman stack. gemma-4-e2b
+  # honors reasoning_effort: none (no <think> preamble); swap in lfm2.5-8b-a1b
+  # for the larger chat model (it's installed by the compose `command:` too).
+  llm: gemma-4-e2b-it-qat-q4_0
+  # piper voice: synthesizes in ~2s vs ~16s for qwen3-tts-cpp on CPU — the TTS
+  # stage is the voice-loop bottleneck. This is an Italian female voice; pick a
+  # different piper voice from the gallery for another language, or swap in
+  # qwen3-tts-cpp (also installed) for the neural multilingual voice.
+  tts: voice-it-paola-medium
 
-  # qwen3-0.6b is a reasoning model that emits <think> blocks — wasteful and
+  # Keep the pipeline's LLM from emitting <think> blocks — wasteful and
   # cluttered for a voice assistant. Turn reasoning off for the pipeline's LLM:
   #
   # reasoning_effort reaches the backend's chat template (so it works for models
-  # that only honor the effort level, e.g. gpt-oss / LFM2.5) and is merged into
-  # LocalAI, so it works on localai/localai:latest.
+  # that only honor the effort level, e.g. gemma / gpt-oss / LFM2.5) and is
+  # merged into LocalAI, so it works on localai/localai:latest.
   reasoning_effort: none      # none | minimal | low | medium | high
   #
   # Alternative for models that honor the enable_thinking flag (Qwen3 does):

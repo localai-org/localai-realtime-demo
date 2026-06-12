@@ -2,9 +2,9 @@
 #
 #   docker compose up
 #
-# Starts LocalAI on http://localhost:8080, installs the four sub-models the
-# realtime pipeline needs (VAD, STT, LLM, TTS) from the gallery on first start,
-# and serves the pipeline at:
+# Starts LocalAI on http://localhost:8080, installs the sub-models the realtime
+# pipeline needs (VAD, STT, LLM, TTS) from the gallery on first start, and
+# serves the pipeline at:
 #
 #   ws://localhost:8080/v1/realtime?model=gpt-realtime
 #
@@ -16,9 +16,11 @@
 #
 services:
   localai:
-    # CPU image. For NVIDIA GPUs use localai/localai:latest-gpu-nvidia-cuda-12
+    # CPU image. master carries the reasoning_effort->backend forwarding that
+    # lets lfm2.5-8b-a1b honor "none" (PR #10184), landed after the v4.3.6
+    # 'latest' tag. For NVIDIA GPUs use localai/localai:master-gpu-nvidia-cuda-12
     # (and add a `deploy.resources.reservations.devices` GPU stanza below).
-    image: localai/localai:latest
+    image: localai/localai:master
     container_name: localai-realtime
     ports:
       # Host port is overridable (LOCALAI_PORT) for when 8080 is already taken;
@@ -32,13 +34,19 @@ services:
       # sub-model configs and their weights are cached here too (git-ignored).
       - ./localai/models:/models
     # Positional args install + load these gallery models at startup; the
-    # pipeline references them by name. Swap qwen3-0.6b for a larger chat model
-    # if you have the RAM/VRAM (and update llm: in gpt-realtime.yaml to match).
+    # pipeline (gpt-realtime.yaml) references them by name. Defaults match the
+    # wingman stack: gemma-4-e2b for the LLM (honors reasoning_effort: none, so
+    # no <think> preamble) and piper voice-it-paola-medium for TTS (~2s/utterance
+    # vs ~16s for qwen3-tts-cpp on CPU). lfm2.5-8b-a1b (larger chat model) and
+    # qwen3-tts-cpp (neural voice) are installed too as the heavier swap-in
+    # options — point llm:/tts: in gpt-realtime.yaml at them to use them.
     command:
       - silero-vad-ggml
       - parakeet-cpp-tdt-0.6b-v3
+      - gemma-4-e2b-it-qat-q4_0
+      - lfm2.5-8b-a1b
+      - voice-it-paola-medium
       - qwen3-tts-cpp
-      - qwen3-0.6b
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
       interval: 15s

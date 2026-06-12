@@ -21,7 +21,7 @@ realtime conversation loop.
 
 ## Quick start (Docker Compose)
 
-Start the LocalAI backend (downloads the four sub-models on first run):
+Start the LocalAI backend (downloads the sub-models on first run):
 
 ```bash
 docker compose up
