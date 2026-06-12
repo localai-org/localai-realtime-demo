@@ -1,4 +1,6 @@
 /assistant
 /cmd/assistant/assistant
+/bin/
+/.localvqe/
 *.wav
 .DS_Store

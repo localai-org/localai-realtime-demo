@@ -57,9 +57,7 @@ func main() {
 		"You are a helpful voice assistant. Keep replies short and conversational. Use the get_weather tool when the user asks about the weather."),
 		"system instructions")
 	sampleRate := flag.Int("sample-rate", 24000, "PCM sample rate (Hz)")
-	aecEnabled := flag.Bool("aec", envBool("AEC", true), "enable LocalVQE acoustic echo cancellation when the library and model are available")
-	localvqeLib := flag.String("localvqe-lib", env("LOCALVQE_LIB", "liblocalvqe.so"), "path to liblocalvqe.so")
-	localvqeModel := flag.String("localvqe-model", env("LOCALVQE_MODEL", ""), "path to the LocalVQE GGUF model")
+	aecEnabled := flag.Bool("aec", envBool("AEC", true), "enable LocalVQE acoustic echo cancellation when a model is bundled into the binary")
 	aecDelayMs := flag.Int("aec-delay-ms", envInt("AEC_DELAY_MS", 50), "AEC reference delay in ms (speaker->mic acoustic path)")
 	flag.Parse()
 
@@ -69,22 +67,26 @@ func main() {
 	micOut := make(chan []byte, 64)
 	playIn := make(chan []byte, 256)
 
-	// Optional acoustic echo cancellation. On any setup problem we log once and
-	// fall back to passthrough rather than failing the session.
+	// Optional acoustic echo cancellation. The LocalVQE lib + model are bundled
+	// into the binary (see `make build`); when no model is bundled, AEC is simply
+	// disabled and the mic passes through untouched.
 	var aecOpts *audio.AECOptions
 	var aecEngine *localvqe.LocalVQE
 	if *aecEnabled {
+		libPath, modelPath, ok, eerr := localvqe.EnsureEmbedded()
 		switch {
-		case *localvqeModel == "":
-			log.Println("aec: disabled (no LOCALVQE_MODEL / -localvqe-model set)")
+		case eerr != nil:
+			log.Printf("aec: disabled (embedded asset extraction failed: %v)", eerr)
+		case !ok:
+			log.Println("aec: disabled (no bundled LocalVQE model; build with `make` to bundle one)")
 		default:
-			engine, err := localvqe.New(*localvqeLib, *localvqeModel)
+			engine, err := localvqe.New(libPath, modelPath)
 			if err != nil {
 				log.Printf("aec: disabled (%v)", err)
 			} else {
 				aecEngine = engine
 				aecOpts = &audio.AECOptions{Engine: engine, DelayMs: *aecDelayMs}
-				log.Printf("aec: enabled (lib=%s model=%s delay=%dms)", *localvqeLib, *localvqeModel, *aecDelayMs)
+				log.Printf("aec: enabled (delay=%dms)", *aecDelayMs)
 			}
 		}
 	}
