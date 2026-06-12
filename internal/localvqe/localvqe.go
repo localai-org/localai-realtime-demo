@@ -15,7 +15,7 @@ type LocalVQE struct {
 	fnProcessS16      func(uintptr, uintptr, uintptr, int32, uintptr) int32
 	fnProcessFrameS16 func(uintptr, uintptr, uintptr, int32, uintptr) int32
 	fnReset           func(uintptr)
-	fnLastError       func(uintptr) uintptr
+	fnLastError       func(uintptr) string
 	fnSampleRate      func(uintptr) int32
 	fnHopLength       func(uintptr) int32
 	fnSetNoiseGate    func(uintptr, int32, float32) int32
@@ -97,20 +97,7 @@ func (d *LocalVQE) HopLength() int { return int(d.fnHopLength(d.ctx)) }
 func (d *LocalVQE) SampleRate() int { return int(d.fnSampleRate(d.ctx)) }
 
 func (d *LocalVQE) LastError() string {
-	ptr := d.fnLastError(d.ctx)
-	if ptr == 0 {
-		return ""
-	}
-	p := unsafe.Pointer(ptr)
-	var buf []byte
-	for i := 0; ; i++ {
-		b := *(*byte)(unsafe.Add(p, i))
-		if b == 0 {
-			break
-		}
-		buf = append(buf, b)
-	}
-	return string(buf)
+	return d.fnLastError(d.ctx)
 }
 
 // Close frees the context and unloads the library.
