@@ -15,7 +15,8 @@ VoxInput needs for desktop control.
 
 - Linux/macOS input simulation (dotool, CoreGraphics) — no keyboard/mouse output
 - Screenshot tool
-- Acoustic echo cancellation / LocalVQE neural noise suppression
+- ~~Acoustic echo cancellation / LocalVQE neural noise suppression~~ —
+  delivered later; see `2026-06-12-acoustic-echo-cancellation-design.md`.
 - Bubbletea TUI
 - IPC unix-socket server and the `record`/`write`/`toggle`/`status` signal IPC
 - HTTP transcription-only mode (`--no-realtime`)

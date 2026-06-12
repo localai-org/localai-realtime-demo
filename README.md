@@ -77,3 +77,25 @@ it in `cmd/assistant/main.go`.
 - `realtime/` — WebSocket client, session setup, event loop, tool registry
 - `tools/` — the `get_weather` example
 - `cmd/assistant/` — CLI entry point
+
+## Echo cancellation (optional)
+
+In a voice session the assistant's speech plays on your speakers and the open
+mic re-captures it, which causes self-echo and makes the assistant interrupt
+itself. The client can remove its own voice from the mic with
+[LocalVQE](https://github.com/localai-org/LocalVQE) neural acoustic echo
+cancellation (16 kHz, runs on the CPU, no cgo - loaded via `purego`).
+
+Build the library and fetch the model:
+
+```bash
+scripts/fetch-localvqe.sh
+```
+
+Then run with the printed env vars set (or pass `-localvqe-lib` /
+`-localvqe-model`). AEC is on by default but **silently falls back to
+passthrough** when the library or model is missing, so the assistant always
+runs. Tunables: `-aec` (on/off), `-aec-delay-ms` (reference delay, default 50).
+
+This removes only the assistant's own voice; genuine speech still reaches the
+server's VAD, so you can still interrupt the assistant by talking (barge-in).
