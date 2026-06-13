@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -60,6 +61,9 @@ func main() {
 	sampleRate := flag.Int("sample-rate", 24000, "PCM sample rate (Hz)")
 	aecEnabled := flag.Bool("aec", envBool("AEC", true), "enable LocalVQE acoustic echo cancellation when a model is bundled into the binary")
 	aecDelayMs := flag.Int("aec-delay-ms", envInt("AEC_DELAY_MS", 50), "AEC reference delay in ms (speaker->mic acoustic path)")
+	fallbackWSURL := flag.String("fallback-ws-url", env("FALLBACK_WS_BASE_URL", "ws://localhost:8080/v1/realtime"), "fallback LocalAI realtime WebSocket URL")
+	fallbackModel := flag.String("fallback-model", env("FALLBACK_MODEL", ""), "fallback realtime model (empty = same as -model)")
+	fallbackAPIKey := flag.String("fallback-api-key", env("FALLBACK_API_KEY", ""), "fallback API key (empty = same as -api-key)")
 	flag.Parse()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -119,38 +123,100 @@ func main() {
 	}
 	registry.Register(weather)
 
-	// Client.
-	client := realtime.NewClient(realtime.Config{
-		WSURL:        *wsURL,
-		APIKey:       *apiKey,
-		Model:        *model,
-		Voice:        *voice,
-		Instructions: *instructions,
-		Language:     *language,
-		SampleRate:   *sampleRate,
-		Timeout:      30 * time.Second,
-	}, registry, player)
-
-	if err := client.Connect(ctx); err != nil {
-		log.Fatalln("connect:", err)
+	// Endpoints: primary first, then fallback. Failover walks this list from the
+	// top on every (re)connect, which also gives automatic fail-back to primary.
+	endpoints := []realtime.Endpoint{
+		{Name: "primary", WSURL: *wsURL, Model: *model, APIKey: *apiKey},
+		{Name: "fallback", WSURL: *fallbackWSURL, Model: orDefault(*fallbackModel, *model), APIKey: orDefault(*fallbackAPIKey, *apiKey)},
 	}
-	log.Printf("connected to %s — start talking (Ctrl-C to quit)", *wsURL)
+	if endpoints[0].WSURL == endpoints[1].WSURL &&
+		endpoints[0].Model == endpoints[1].Model &&
+		endpoints[0].APIKey == endpoints[1].APIKey {
+		log.Println("fallback endpoint is identical to primary; failover is a no-op")
+	}
 
-	// Forward captured mic audio to the server.
+	// Current connected session, swapped on each (re)connect. The mic-forwarding
+	// goroutine routes captured audio to whichever session is live; chunks
+	// captured while reconnecting are dropped (context is lost on switch).
+	var (
+		curMu sync.Mutex
+		cur   realtime.Session
+	)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case chunk := <-micOut:
-				if err := client.SendAudio(ctx, chunk); err != nil {
+				curMu.Lock()
+				s := cur
+				curMu.Unlock()
+				if s == nil {
+					continue
+				}
+				if err := s.SendAudio(ctx, chunk); err != nil {
 					log.Println("send audio:", err)
 				}
 			}
 		}
 	}()
 
-	if err := client.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Println("run:", err)
+	sup := &realtime.Supervisor{
+		Endpoints: endpoints,
+		Dial: func(ctx context.Context, ep realtime.Endpoint) (realtime.Session, error) {
+			client := realtime.NewClient(realtime.Config{
+				WSURL:        ep.WSURL,
+				APIKey:       ep.APIKey,
+				Model:        ep.Model,
+				Voice:        *voice,
+				Instructions: *instructions,
+				Language:     *language,
+				SampleRate:   *sampleRate,
+				Timeout:      30 * time.Second,
+			}, registry, player)
+			if err := client.Connect(ctx); err != nil {
+				return nil, err
+			}
+			log.Printf("connected to %s (%s)", ep.WSURL, ep.Name)
+			return client, nil
+		},
+		OnConnect: func(s realtime.Session) {
+			curMu.Lock()
+			cur = s
+			curMu.Unlock()
+		},
+		OnSwitch: func(from, to *realtime.Endpoint) {
+			// Ascending sweep when moving toward the primary (lower index),
+			// descending toward the fallback. from is non-nil here.
+			if endpointIndex(endpoints, to) < endpointIndex(endpoints, from) {
+				player.Write(audio.ToneSweep(*sampleRate, 440, 660, 200*time.Millisecond))
+			} else {
+				player.Write(audio.ToneSweep(*sampleRate, 660, 440, 200*time.Millisecond))
+			}
+		},
+		Backoff: realtime.BackoffPolicy{Min: time.Second, Max: 30 * time.Second},
 	}
+
+	log.Printf("starting (primary=%s fallback=%s) — start talking (Ctrl-C to quit)", *wsURL, *fallbackWSURL)
+	if err := sup.Run(ctx); err != nil && ctx.Err() == nil {
+		log.Println("supervisor:", err)
+	}
+}
+
+func orDefault(v, def string) string {
+	if v != "" {
+		return v
+	}
+	return def
+}
+
+// endpointIndex returns the position of ep within eps by pointer identity. The
+// Supervisor passes pointers into this same slice, so identity is exact.
+func endpointIndex(eps []realtime.Endpoint, ep *realtime.Endpoint) int {
+	for i := range eps {
+		if &eps[i] == ep {
+			return i
+		}
+	}
+	return -1
 }
