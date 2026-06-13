@@ -71,9 +71,13 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.conn = conn
 
 	if err := c.waitForSession(ctx); err != nil {
+		c.conn.Close()
+		c.conn = nil
 		return fmt.Errorf("wait for session: %w", err)
 	}
 	if err := c.updateSession(ctx); err != nil {
+		c.conn.Close()
+		c.conn = nil
 		return fmt.Errorf("update session: %w", err)
 	}
 	return nil
@@ -207,6 +211,17 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// Close shuts down the underlying WebSocket connection. It is safe to call once
+// after Run returns; the Supervisor calls it when a session ends so that an
+// abrupt disconnect does not leak the connection's goroutine and file
+// descriptor.
+func (c *Client) Close() error {
+	if c.conn == nil {
+		return nil
+	}
+	return c.conn.Close()
 }
 
 // bargeIn handles the user talking over the assistant. It always flushes the

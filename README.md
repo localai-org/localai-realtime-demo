@@ -57,15 +57,38 @@ calls the tool, gets canned data back, and speaks the result.
 
 ## Configuration
 
-| Flag            | Env                      | Default                            |
-|-----------------|--------------------------|------------------------------------|
-| `-ws-url`       | `OPENAI_WS_BASE_URL`     | `ws://localhost:8080/v1/realtime`  |
-| `-api-key`      | `OPENAI_API_KEY`         | `sk-xxx` (LocalAI ignores it)      |
-| `-model`        | `ASSISTANT_MODEL`        | `gpt-4o-realtime-preview`          |
-| `-voice`        | `ASSISTANT_VOICE`        | server default                     |
-| `-language`     | `ASSISTANT_LANGUAGE`     | auto-detect (ISO-639-1, e.g. `it`) |
-| `-instructions` | `ASSISTANT_INSTRUCTIONS` | short helpful-assistant prompt     |
-| `-sample-rate`  | —                        | `24000`                            |
+| Flag                | Env                      | Default                            |
+|---------------------|--------------------------|------------------------------------|
+| `-ws-url`           | `OPENAI_WS_BASE_URL`     | `ws://localhost:8080/v1/realtime`  |
+| `-api-key`          | `OPENAI_API_KEY`         | `sk-xxx` (LocalAI ignores it)      |
+| `-model`            | `ASSISTANT_MODEL`        | `gpt-4o-realtime-preview`          |
+| `-voice`            | `ASSISTANT_VOICE`        | server default                     |
+| `-language`         | `ASSISTANT_LANGUAGE`     | auto-detect (ISO-639-1, e.g. `it`) |
+| `-instructions`     | `ASSISTANT_INSTRUCTIONS` | short helpful-assistant prompt     |
+| `-sample-rate`      | —                        | `24000`                            |
+| `-fallback-ws-url`  | `FALLBACK_WS_BASE_URL`   | `ws://localhost:8080/v1/realtime`  |
+| `-fallback-model`   | `FALLBACK_MODEL`         | (same as `-model`)                 |
+| `-fallback-api-key` | `FALLBACK_API_KEY`       | (same as `-api-key`)               |
+
+### Fallback / failover
+
+The assistant tries the **primary** endpoint (`-ws-url`) first and automatically
+falls back to a **local** endpoint (`-fallback-ws-url`, defaulting to the
+docker-compose instance) when the primary can't be reached — for example when a
+remote primary loses internet connectivity.
+
+Failover happens at (re)connect time. If the connection drops mid-conversation
+the assistant reconnects, walking the endpoint list from the top; conversation
+context is **not** preserved across a switch. Because every reconnect starts from
+the primary, the assistant automatically returns to it once it is healthy again.
+
+A short tone plays on each switch: an ascending sweep when moving (back) to the
+primary, a descending sweep when dropping to the fallback. If every endpoint is
+unreachable the assistant keeps retrying with a capped backoff (1s up to 30s)
+until one answers or you quit (Ctrl-C).
+
+Each endpoint may use its own model and API key via `-fallback-model` /
+`-fallback-api-key`; when omitted they reuse `-model` / `-api-key`.
 
 ## Adding a tool
 
