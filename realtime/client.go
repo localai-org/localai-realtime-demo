@@ -209,6 +209,17 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
+// Close shuts down the underlying WebSocket connection. It is safe to call once
+// after Run returns; the Supervisor calls it when a session ends so that an
+// abrupt disconnect does not leak the connection's goroutine and file
+// descriptor.
+func (c *Client) Close() error {
+	if c.conn == nil {
+		return nil
+	}
+	return c.conn.Close()
+}
+
 // bargeIn handles the user talking over the assistant. It always flushes the
 // local playback buffer — the server streams a whole response in a burst, so
 // by the time speech is detected it has usually finished sending and seconds of

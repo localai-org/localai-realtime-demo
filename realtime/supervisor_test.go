@@ -16,6 +16,7 @@ func (blockingSession) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 func (blockingSession) SendAudio(context.Context, []byte) error { return nil }
+func (blockingSession) Close() error                            { return nil }
 
 // endNowSession.Run returns immediately, simulating a dropped connection that
 // forces the supervisor to reconnect.
@@ -23,6 +24,7 @@ type endNowSession struct{}
 
 func (endNowSession) Run(context.Context) error              { return nil }
 func (endNowSession) SendAudio(context.Context, []byte) error { return nil }
+func (endNowSession) Close() error                            { return nil }
 
 func twoEndpoints() []Endpoint {
 	return []Endpoint{
@@ -290,5 +292,42 @@ func TestSupervisorEmptyEndpointsReturnsError(t *testing.T) {
 	}
 	if dialed {
 		t.Fatal("dialed despite empty endpoint list")
+	}
+}
+
+// closeRecorderSession ends immediately and records that Close was called.
+type closeRecorderSession struct{ closed *int }
+
+func (closeRecorderSession) Run(context.Context) error               { return nil }
+func (closeRecorderSession) SendAudio(context.Context, []byte) error { return nil }
+func (s closeRecorderSession) Close() error                          { *s.closed++; return nil }
+
+func TestSupervisorClosesSessionAndFiresOnDisconnect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	closed := 0
+	disconnects := 0
+
+	sup := &Supervisor{
+		Endpoints: twoEndpoints(),
+		Dial: func(context.Context, Endpoint) (Session, error) {
+			return closeRecorderSession{closed: &closed}, nil
+		},
+		OnDisconnect: func() { disconnects++ },
+		Backoff:      BackoffPolicy{Min: time.Second, Max: 30 * time.Second},
+		Sleep: func(context.Context, time.Duration) {
+			cancel() // stop after the first connect+disconnect cycle
+		},
+	}
+
+	if err := sup.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run returned %v, want context.Canceled", err)
+	}
+	if closed < 1 {
+		t.Fatalf("session Close called %d times, want >= 1", closed)
+	}
+	if disconnects < 1 {
+		t.Fatalf("OnDisconnect called %d times, want >= 1", disconnects)
 	}
 }

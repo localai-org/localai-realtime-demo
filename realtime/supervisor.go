@@ -23,6 +23,7 @@ type Endpoint struct {
 type Session interface {
 	Run(ctx context.Context) error // blocks until the connection ends
 	SendAudio(ctx context.Context, pcm []byte) error
+	Close() error
 }
 
 // Dialer establishes a ready session for an endpoint (dial + Connect + session
@@ -51,6 +52,10 @@ type Supervisor struct {
 	// first connection, where there is nothing to switch from). from is non-nil.
 	// Optional.
 	OnSwitch func(from, to *Endpoint)
+	// OnDisconnect is called after a live session ends and is closed, before the
+	// next reconnect attempt, so the caller can stop routing audio to the now
+	// dead session. Optional.
+	OnDisconnect func()
 
 	Backoff BackoffPolicy
 	// Sleep waits for d or until ctx is cancelled. Defaults to a ctx-aware sleep;
@@ -107,8 +112,14 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			}
 
 			rerr := sess.Run(ctx)
+			if cerr := sess.Close(); cerr != nil {
+				log.Printf("supervisor: endpoint %q close: %v", ep.Name, cerr)
+			}
 			if cerr := ctx.Err(); cerr != nil {
 				return cerr
+			}
+			if s.OnDisconnect != nil {
+				s.OnDisconnect()
 			}
 			log.Printf("supervisor: endpoint %q session ended: %v; reconnecting", ep.Name, rerr)
 			break // restart the endpoint list from the top

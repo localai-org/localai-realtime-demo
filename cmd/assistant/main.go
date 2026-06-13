@@ -194,6 +194,11 @@ func main() {
 				player.Write(audio.ToneSweep(*sampleRate, 660, 440, 200*time.Millisecond))
 			}
 		},
+		OnDisconnect: func() {
+			curMu.Lock()
+			cur = nil
+			curMu.Unlock()
+		},
 		Backoff: realtime.BackoffPolicy{Min: time.Second, Max: 30 * time.Second},
 	}
 
