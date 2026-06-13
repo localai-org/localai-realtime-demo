@@ -34,7 +34,7 @@ func TestRunAssumeYes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if choice.LLM != "gemma-4-e2b-it-qat-q4_0" || choice.TTS != "vits-piper-it_IT-paola-sherpa" {
+	if choice.LLM != "gemma-4-e2b-it-qat-q4_0" || choice.TTS != "kokoro-multi-lang-v1.0-sherpa" {
 		t.Errorf("defaults not applied: %+v", choice)
 	}
 	b, err := os.ReadFile(out)

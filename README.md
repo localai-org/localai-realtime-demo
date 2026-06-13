@@ -59,6 +59,13 @@ compose overwrites the tracked CPU default (a `.bak` is kept first); use
 `setup` also writes your `pipeline.llm`/`pipeline.tts` choices into
 `localai/models/gpt-realtime.yaml`.
 
+> **TTS default — Kokoro multilingual.** The default voice
+> (`kokoro-multi-lang-v1.0-sherpa`) needs a `sherpa-onnx` backend that carries the
+> Kokoro routing (LocalAI ≥ commit `20341087`). If your `cpu-sherpa-onnx` backend
+> is older, Kokoro fails to load — pick another voice in `setup` (e.g.
+> `qwen3-tts-cpp`, also multilingual), or refresh the backend
+> (`POST /backends/upgrade/cpu-sherpa-onnx`) once a newer OCI is published.
+
 ## Build
 
 ```bash

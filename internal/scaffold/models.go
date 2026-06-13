@@ -46,10 +46,14 @@ var preferredLLMs = []Model{
 // wingman stack); kokoros / kokoro-multi-lang cover English and multilingual,
 // qwen3-tts-cpp is the heavier neural option.
 var preferredTTS = []Model{
-	{ID: "vits-piper-it_IT-paola-sherpa", Backend: "sherpa-onnx", Description: "Italian (Paola)", Default: true},
-	{ID: "kokoros", Backend: "sherpa-onnx", Description: "English (Kokoro)"},
+	// Kokoro multilingual is the default. It needs a sherpa-onnx backend that
+	// carries the Kokoro routing (>= LocalAI commit 20341087); on an older
+	// published cpu-sherpa-onnx OCI it fails to load — pick another voice in the
+	// wizard, or wait for the backend OCI to catch up. See the README.
+	{ID: "kokoro-multi-lang-v1.0-sherpa", Backend: "sherpa-onnx", Description: "multilingual (Kokoro)", Default: true},
+	{ID: "vits-piper-it_IT-paola-sherpa", Backend: "sherpa-onnx", Description: "Italian (Paola)"},
 	{ID: "qwen3-tts-cpp", Backend: "qwen3-tts-cpp", Description: "neural; speakers / voice-design"},
-	{ID: "kokoro-multi-lang-v1.0-sherpa", Backend: "sherpa-onnx", Description: "multilingual (Kokoro)"},
+	{ID: "kokoros", Backend: "sherpa-onnx", Description: "English (Kokoro)"},
 }
 
 // PreferredLLMs returns the curated chat-LLM shortlist (a copy).
