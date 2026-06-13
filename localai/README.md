@@ -60,16 +60,25 @@ gracefully to non-streaming.
 | Backend          | Streaming | Example gallery models |
 |------------------|-----------|------------------------|
 | **sherpa-onnx**  | ✅ | `vits-piper-it_IT-paola-sherpa`, `vits-piper-en_US-amy-sherpa`, `vits-piper-es_ES-davefx-sherpa`, `vits-piper-fr_FR-siwis-sherpa`, `vits-piper-de_DE-thorsten-sherpa`, `kokoro-multi-lang-v1.0-sherpa`, `vits-ljs-sherpa` |
+| **qwen3-tts-cpp** | ✅ | `qwen3-tts-cpp` (0.6B), `qwen3-tts-cpp-1.7b-base`, `qwen3-tts-cpp-customvoice`, `qwen3-tts-cpp-1.7b-customvoice` (+ `*-q4` variants) |
 | **voxcpm**       | ✅ | `voxcpm-1.5` |
 | **vibevoice-cpp**| ✅ | `vibevoice-cpp` |
 | **omnivoice-cpp**| ✅ | `omnivoice-cpp`, `omnivoice-cpp-hq` |
-| piper, qwen3-tts-cpp, kokoro, coqui, … | ❌ (file only) | `voice-it-paola-medium`, `qwen3-tts-cpp` |
+| piper, kokoro, coqui, … | ❌ (file only) | `voice-it-paola-medium` |
 
 The default pipeline uses `vits-piper-it_IT-paola-sherpa` — the same Italian
 "Paola" voice as the old piper `voice-it-paola-medium`, but served through
 sherpa-onnx so it streams. To use a different streaming voice, install it from
 the gallery and point `tts:` at it; for non-Italian languages pick the matching
 `vits-piper-*-sherpa` voice or the multilingual `kokoro-multi-lang-v1.0-sherpa`.
+
+`qwen3-tts-cpp` is a neural multilingual alternative that **also streams** (since
+[LocalAI #10316](https://github.com/mudler/LocalAI/pull/10316), which migrated it
+to `qwentts.cpp`). Beyond streaming it adds named speakers (`voice: serena`,
+`vivian`, `ryan`, …), free-text voice design (`instructions:`), and voice cloning
+(`voice:` = a 24 kHz reference `.wav`). It is heavier than the sherpa voices on
+CPU. Note its GGUF format changed in that migration — reinstall the
+`qwen3-tts-cpp*` model from the gallery if you used an older build.
 
 ## Quick start (Docker Compose)
 

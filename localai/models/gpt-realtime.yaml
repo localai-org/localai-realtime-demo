@@ -21,7 +21,8 @@ pipeline:
   # old piper voice-it-paola-medium, fast on CPU. Pick a different sherpa voice
   # from the gallery for another language (see localai/README.md → Streaming TTS
   # for the full list), or swap in qwen3-tts-cpp for the neural multilingual voice
-  # (non-streaming, ~16s/utterance on CPU).
+  # (also streams as of LocalAI #10316 — adds named speakers, voice design and
+  # cloning — but heavier on CPU).
   tts: vits-piper-it_IT-paola-sherpa
 
   # Stream the LLM reply straight into TTS so audio starts before the whole
