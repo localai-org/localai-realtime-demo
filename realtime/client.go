@@ -23,23 +23,36 @@ type Config struct {
 	Timeout      time.Duration
 }
 
+// Player consumes assistant playback audio. Write appends decoded PCM; Flush
+// drops everything still buffered (used for barge-in) and returns the dropped
+// byte count.
+type Player interface {
+	Write(pcm []byte)
+	Flush() int
+}
+
 // Client wraps the realtime WebSocket connection and dispatches server events.
 type Client struct {
 	cfg      Config
 	registry *Registry
-	playIn   chan<- []byte
+	player   Player
 	rt       *openairt.Client
 	conn     *openairt.Conn
+
+	// responseActive tracks whether the server is generating a response, so
+	// barge-in only sends response.cancel when there is something to cancel.
+	// Touched only from the single-threaded Run loop.
+	responseActive bool
 }
 
-func NewClient(cfg Config, registry *Registry, playIn chan<- []byte) *Client {
+func NewClient(cfg Config, registry *Registry, player Player) *Client {
 	rtConf := openairt.DefaultConfig(cfg.APIKey)
 	rtConf.BaseURL = cfg.WSURL
 	rtConf.HTTPClient = &http.Client{Timeout: cfg.Timeout}
 	return &Client{
 		cfg:      cfg,
 		registry: registry,
-		playIn:   playIn,
+		player:   player,
 		rt:       openairt.NewClientWithConfig(rtConf),
 	}
 }
@@ -161,6 +174,7 @@ func (c *Client) Run(ctx context.Context) error {
 		switch msg.ServerEventType() {
 		case openairt.ServerEventTypeInputAudioBufferSpeechStarted:
 			log.Println("realtime: speech detected")
+			c.bargeIn(ctx)
 		case openairt.ServerEventTypeInputAudioBufferSpeechStopped:
 			log.Println("realtime: speech stopped")
 		case openairt.ServerEventTypeConversationItemInputAudioTranscriptionCompleted:
@@ -169,6 +183,9 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 		case openairt.ServerEventTypeResponseCreated:
 			log.Println("realtime: generating response")
+			c.responseActive = true
+		case openairt.ServerEventTypeResponseDone:
+			c.responseActive = false
 		case openairt.ServerEventTypeResponseOutputAudioDelta:
 			ev, ok := msg.(openairt.ResponseOutputAudioDeltaEvent)
 			if !ok {
@@ -179,11 +196,7 @@ func (c *Client) Run(ctx context.Context) error {
 				log.Println("realtime: decode audio delta:", err)
 				continue
 			}
-			select {
-			case c.playIn <- pcm:
-			default:
-				log.Println("realtime: dropped playback chunk")
-			}
+			c.player.Write(pcm)
 		case openairt.ServerEventTypeResponseFunctionCallArgumentsDone:
 			if ev, ok := msg.(openairt.ResponseFunctionCallArgumentsDoneEvent); ok {
 				c.handleFunctionCall(ctx, ev)
@@ -193,6 +206,25 @@ func (c *Client) Run(ctx context.Context) error {
 				log.Println("realtime: server error:", ev.Error.Message)
 			}
 		}
+	}
+}
+
+// bargeIn handles the user talking over the assistant. It always flushes the
+// local playback buffer — the server streams a whole response in a burst, so
+// by the time speech is detected it has usually finished sending and seconds of
+// TTS remain buffered locally; cancelling server-side alone would not silence
+// it. response.cancel is only sent when a response is genuinely still active
+// (the server errors on a cancel with nothing to cancel).
+func (c *Client) bargeIn(ctx context.Context) {
+	if dropped := c.player.Flush(); dropped > 0 {
+		log.Printf("realtime: barge-in, flushed %d bytes of playback", dropped)
+	}
+	if !c.responseActive {
+		return
+	}
+	c.responseActive = false
+	if err := c.conn.SendMessage(ctx, openairt.ResponseCancelEvent{}); err != nil {
+		log.Println("realtime: cancel response:", err)
 	}
 }
 

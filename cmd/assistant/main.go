@@ -66,7 +66,7 @@ func main() {
 	defer cancel()
 
 	micOut := make(chan []byte, 64)
-	playIn := make(chan []byte, 256)
+	player := audio.NewPlayer()
 
 	// Optional acoustic echo cancellation. The LocalVQE lib + model are bundled
 	// into the binary (see `make build`); when no model is bundled, AEC is simply
@@ -96,7 +96,7 @@ func main() {
 	audioDone := make(chan struct{})
 	go func() {
 		defer close(audioDone)
-		if err := audio.Duplex(ctx, *sampleRate, micOut, playIn, aecOpts); err != nil {
+		if err := audio.Duplex(ctx, *sampleRate, micOut, player, aecOpts); err != nil {
 			log.Println("audio:", err)
 			cancel()
 		}
@@ -129,7 +129,7 @@ func main() {
 		Language:     *language,
 		SampleRate:   *sampleRate,
 		Timeout:      30 * time.Second,
-	}, registry, playIn)
+	}, registry, player)
 
 	if err := client.Connect(ctx); err != nil {
 		log.Fatalln("connect:", err)

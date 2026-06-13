@@ -110,3 +110,13 @@ knobs remain: `-aec` (force it off) and `-aec-delay-ms` (reference delay, defaul
 
 This removes only the assistant's own voice; genuine speech still reaches the
 server's VAD, so you can still interrupt the assistant by talking (barge-in).
+
+## Barge-in
+
+When the server's VAD reports that you've started talking, the client
+immediately **flushes its local playback buffer** so the assistant stops
+mid-sentence. This matters because the server streams a whole response in a
+burst — seconds of TTS sit buffered on the client after the server is "done",
+so cancelling the response server-side alone would not stop the audio already
+in the pipe. If a response is still being generated, the client also sends
+`response.cancel`.
