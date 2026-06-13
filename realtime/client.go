@@ -71,9 +71,13 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.conn = conn
 
 	if err := c.waitForSession(ctx); err != nil {
+		c.conn.Close()
+		c.conn = nil
 		return fmt.Errorf("wait for session: %w", err)
 	}
 	if err := c.updateSession(ctx); err != nil {
+		c.conn.Close()
+		c.conn = nil
 		return fmt.Errorf("update session: %w", err)
 	}
 	return nil
