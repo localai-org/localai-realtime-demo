@@ -49,6 +49,16 @@ func envBool(key string, def bool) bool {
 }
 
 func main() {
+	// `setup` is a pre-boot subcommand: it scaffolds a hardware-appropriate
+	// docker-compose stack and exits, before any LocalAI exists. Dispatch it
+	// ahead of the normal connect path so it owns its own flag set.
+	if len(os.Args) > 1 && os.Args[1] == "setup" {
+		if err := runSetup(os.Args[2:]); err != nil {
+			log.Fatalf("setup: %v", err)
+		}
+		return
+	}
+
 	wsURL := flag.String("ws-url", env("OPENAI_WS_BASE_URL", "ws://localhost:8080/v1/realtime"), "LocalAI realtime WebSocket URL")
 	apiKey := flag.String("api-key", env("OPENAI_API_KEY", "sk-xxx"), "API key (LocalAI ignores it)")
 	model := flag.String("model", env("ASSISTANT_MODEL", "gpt-4o-realtime-preview"), "realtime model name served by LocalAI")
