@@ -33,18 +33,19 @@ services:
       # The pipeline config (gpt-realtime.yaml) lives here; the gallery-installed
       # sub-model configs and their weights are cached here too (git-ignored).
       - ./localai/models:/models:z
-    # Positional args install + load these gallery models at startup; the
+    # Positional args install + load these gallery models at startup (installing
+    # a gallery model also pulls the backend it needs, e.g. sherpa-onnx); the
     # pipeline (gpt-realtime.yaml) references them by name. Defaults match the
-    # wingman stack: gemma-4-e2b for the LLM (honors reasoning_effort: none, so
-    # no <think> preamble) and piper voice-it-paola-medium for TTS (~2s/utterance
-    # vs ~16s for qwen3-tts-cpp on CPU). lfm2.5-8b-a1b (larger chat model) and
-    # qwen3-tts-cpp (neural voice) are installed too as the heavier swap-in
-    # options — point llm:/tts: in gpt-realtime.yaml at them to use them.
+    # wingman stack: gemma-4-e2b for the LLM (honors reasoning_effort: none, so no
+    # <think> preamble) and the sherpa-onnx Paola voice for TTS — same Italian
+    # voice as the old piper one but streaming-capable, so gpt-realtime.yaml can
+    # pipeline LLM->TTS (see its `streaming` block). Swap llm:/tts: in
+    # gpt-realtime.yaml for other models (e.g. qwen3-tts-cpp for a neural voice).
     command:
       - silero-vad-ggml
       - parakeet-cpp-tdt-0.6b-v3
       - gemma-4-e2b-it-qat-q4_0
-      - voice-it-paola-medium
+      - vits-piper-it_IT-paola-sherpa
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
       interval: 15s

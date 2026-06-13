@@ -9,17 +9,67 @@ models into one endpoint:
 | `vad`           | `silero-vad-ggml`            | detect when the user speaks |
 | `transcription` | `parakeet-cpp-tdt-0.6b-v3`   | speech → text               |
 | `llm`           | `gemma-4-e2b-it-qat-q4_0`    | generate the reply          |
-| `tts`           | `voice-it-paola-medium`      | text → speech (piper)       |
+| `tts`           | `vits-piper-it_IT-paola-sherpa` | text → speech (sherpa-onnx, streaming) |
 
-The compose file also installs `lfm2.5-8b-a1b` (a larger chat LLM) and
-`qwen3-tts-cpp` (a neural multilingual voice) as heavier swap-in options —
-point `llm:`/`tts:` in `gpt-realtime.yaml` at them to use them.
+The `tts` stage uses the **sherpa-onnx** backend, which supports streaming
+synthesis, so `gpt-realtime.yaml` enables a `streaming` block to pipeline the
+reply into TTS clause-by-clause (see [Streaming TTS](#streaming-tts) below).
+Swap `llm:`/`tts:` in `gpt-realtime.yaml` for other models — e.g. `qwen3-tts-cpp`
+for a neural multilingual voice (non-streaming), or `lfm2.5-8b-a1b` for a larger
+chat LLM.
 
 LocalAI then serves it at:
 
 ```
 ws://localhost:8080/v1/realtime?model=gpt-realtime
 ```
+
+## Streaming TTS
+
+By default a realtime pipeline runs each stage to completion before the next
+begins: the full reply is generated, then synthesized, then played. The
+`streaming` block in `gpt-realtime.yaml` opts stages into incremental delivery
+to cut the time-to-first-audio of a turn:
+
+```yaml
+pipeline:
+  # ...
+  tts: vits-piper-it_IT-paola-sherpa
+  streaming:
+    llm: true              # stream the LLM tokens as they are produced
+    tts: true              # emit an audio delta per synthesized chunk
+    clause_chunking: true  # synthesize each clause as soon as it completes
+                           # (requires llm: true)
+```
+
+- `streaming.tts` only helps with a **TTS backend that supports streaming
+  synthesis** — otherwise LocalAI falls back to a single audio delta for the
+  whole utterance.
+- `streaming.clause_chunking` is where the real win comes from: instead of
+  buffering the whole reply, the LLM output is split into speakable clauses and
+  each is synthesized (and starts playing) while the LLM keeps generating. The
+  benefit shows on multi-sentence replies; a short one-clause reply still
+  synthesizes once at the end, since there is no earlier boundary to speak.
+
+### TTS backends / models that support streaming
+
+These backends implement streaming synthesis (`TTSStream`), so `streaming.tts`
+takes effect with a model served by one of them. Anything else degrades
+gracefully to non-streaming.
+
+| Backend          | Streaming | Example gallery models |
+|------------------|-----------|------------------------|
+| **sherpa-onnx**  | ✅ | `vits-piper-it_IT-paola-sherpa`, `vits-piper-en_US-amy-sherpa`, `vits-piper-es_ES-davefx-sherpa`, `vits-piper-fr_FR-siwis-sherpa`, `vits-piper-de_DE-thorsten-sherpa`, `kokoro-multi-lang-v1.0-sherpa`, `vits-ljs-sherpa` |
+| **voxcpm**       | ✅ | `voxcpm-1.5` |
+| **vibevoice-cpp**| ✅ | `vibevoice-cpp` |
+| **omnivoice-cpp**| ✅ | `omnivoice-cpp`, `omnivoice-cpp-hq` |
+| piper, qwen3-tts-cpp, kokoro, coqui, … | ❌ (file only) | `voice-it-paola-medium`, `qwen3-tts-cpp` |
+
+The default pipeline uses `vits-piper-it_IT-paola-sherpa` — the same Italian
+"Paola" voice as the old piper `voice-it-paola-medium`, but served through
+sherpa-onnx so it streams. To use a different streaming voice, install it from
+the gallery and point `tts:` at it; for non-Italian languages pick the matching
+`vits-piper-*-sherpa` voice or the multilingual `kokoro-multi-lang-v1.0-sherpa`.
 
 ## Quick start (Docker Compose)
 
@@ -64,7 +114,7 @@ poll at `/models/jobs/<uuid>`):
 ```bash
 BASE=http://<host>:<port>/v1   # add -H "Authorization: Bearer $KEY" if auth is on
 
-for id in silero-vad-ggml parakeet-cpp-tdt-0.6b-v3 gemma-4-e2b-it-qat-q4_0 voice-it-paola-medium; do
+for id in silero-vad-ggml parakeet-cpp-tdt-0.6b-v3 gemma-4-e2b-it-qat-q4_0 vits-piper-it_IT-paola-sherpa; do
   curl -sS "$BASE/models/apply" -H 'Content-Type: application/json' -d "{\"id\":\"$id\"}"
   echo
 done

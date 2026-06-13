@@ -15,11 +15,28 @@ pipeline:
   # honors reasoning_effort: none (no <think> preamble); swap in lfm2.5-8b-a1b
   # for the larger chat model (it's installed by the compose `command:` too).
   llm: gemma-4-e2b-it-qat-q4_0
-  # piper voice: synthesizes in ~2s vs ~16s for qwen3-tts-cpp on CPU — the TTS
-  # stage is the voice-loop bottleneck. This is an Italian female voice; pick a
-  # different piper voice from the gallery for another language, or swap in
-  # qwen3-tts-cpp (also installed) for the neural multilingual voice.
-  tts: voice-it-paola-medium
+  # Italian "Paola" voice served through the sherpa-onnx backend, which supports
+  # native streaming synthesis (TTSStream) — that is what lets the `streaming`
+  # block below pipeline the reply into TTS clause-by-clause. Same voice as the
+  # old piper voice-it-paola-medium, fast on CPU. Pick a different sherpa voice
+  # from the gallery for another language (see localai/README.md → Streaming TTS
+  # for the full list), or swap in qwen3-tts-cpp for the neural multilingual voice
+  # (non-streaming, ~16s/utterance on CPU).
+  tts: vits-piper-it_IT-paola-sherpa
+
+  # Stream the LLM reply straight into TTS so audio starts before the whole
+  # answer is generated (lowest time-to-first-audio in the voice loop):
+  #   llm            — stream the LLM tokens as they are produced
+  #   tts            — emit an audio delta per synthesized chunk (requires a
+  #                    streaming-capable TTS backend — see localai/README.md)
+  #   clause_chunking— synthesize each speakable clause as soon as it completes
+  #                    instead of buffering the whole reply (requires streaming.llm)
+  # All default to false; transcription streaming is left off (it can't start the
+  # LLM until the user's utterance is fully decoded, so it adds no latency win).
+  streaming:
+    llm: true
+    tts: true
+    clause_chunking: true
 
   # Keep the pipeline's LLM from emitting <think> blocks — wasteful and
   # cluttered for a voice assistant. Turn reasoning off for the pipeline's LLM:
