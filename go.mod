@@ -7,6 +7,7 @@ require (
 	github.com/ebitengine/purego v0.10.1
 	github.com/gen2brain/malgo v0.11.25
 	github.com/sashabaranov/go-openai v1.41.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require github.com/coder/websocket v1.8.12 // indirect

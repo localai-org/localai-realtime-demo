@@ -37,6 +37,35 @@ CGO_ENABLED=1 go build -o assistant ./cmd/assistant
 See [`localai/README.md`](./localai/README.md) for details and how to point the
 client at an existing LocalAI instance instead.
 
+### Scaffold a hardware-appropriate stack (`assistant setup`)
+
+The tracked `docker-compose.yml` is a CPU default. To generate one tuned to this
+host's accelerator — the right LocalAI image variant, the GPU `deploy`/device
+stanza, and your chosen LLM + TTS models baked into the gallery-install list —
+run the scaffolder *before* bringing LocalAI up:
+
+```bash
+CGO_ENABLED=1 go build -o assistant ./cmd/assistant
+./assistant setup            # interactive: detect-then-confirm HW, pick LLM + TTS
+./assistant setup --yes      # non-interactive: detected HW + default models (CI/board images)
+docker compose up            # first boot gallery-installs the baked models (needs network)
+```
+
+It detects the GPU best-effort (`nvidia-smi`/`rocminfo`/`lspci`/`uname`) and
+preselects a default, but the menu always shows so you can override — e.g.
+scaffold on a laptop for a Jetson. It needs **no running LocalAI**. The generated
+compose overwrites the tracked CPU default (a `.bak` is kept first); use
+`--out <file>` to write elsewhere (refused if it exists, unless `--force`).
+`setup` also writes your `pipeline.llm`/`pipeline.tts` choices into
+`localai/models/gpt-realtime.yaml`.
+
+> **TTS default — Kokoro multilingual.** The default voice
+> (`kokoro-multi-lang-v1.0-sherpa`) needs a `sherpa-onnx` backend that carries the
+> Kokoro routing (LocalAI ≥ commit `20341087`). If your `cpu-sherpa-onnx` backend
+> is older, Kokoro fails to load — pick another voice in `setup` (e.g.
+> `qwen3-tts-cpp`, also multilingual), or refresh the backend
+> (`POST /backends/upgrade/cpu-sherpa-onnx`) once a newer OCI is published.
+
 ## Build
 
 ```bash
