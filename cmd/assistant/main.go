@@ -66,7 +66,8 @@ func main() {
 	voice := flag.String("voice", env("ASSISTANT_VOICE", ""), "TTS voice (empty = server default)")
 	language := flag.String("language", env("ASSISTANT_LANGUAGE", ""), "input audio language as ISO-639-1, e.g. en/it (empty = auto-detect)")
 	instructions := flag.String("instructions", env("ASSISTANT_INSTRUCTIONS",
-		"You are a helpful voice assistant. Keep replies short and conversational."),
+		"You are a helpful voice assistant. Keep replies short and conversational. "+
+			"Always respond in the same language the user is speaking."),
 		"system instructions")
 	mcpConfig := flag.String("mcp-config", env("ASSISTANT_MCP_CONFIG", ""),
 		"path to an mcpServers JSON file; its servers' tools are exposed to the model")
