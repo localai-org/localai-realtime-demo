@@ -23,12 +23,15 @@ type AECOptions struct {
 	DelayMs int
 }
 
-// Duplex opens the default capture+playback device as PCM16 mono at the given
-// sample rate. Captured microphone frames are pushed to micOut (dropped if the
-// channel is full); audio written to player is played through the speaker.
-// When aec is non-nil and aec.Engine is set, mic audio is echo-cancelled
-// against the speaker output before reaching micOut. It blocks until ctx is
-// cancelled or the device errors.
+// Duplex opens separate capture and playback devices as PCM16 mono at the given
+// sample rate. Two independent devices (rather than one duplex device) work
+// reliably across backends — notably PulseAudio/PipeWire, where the mic and
+// speaker are distinct nodes and a single duplex device may capture nothing.
+// Captured microphone frames are pushed to micOut (dropped if the channel is
+// full); audio written to player is played through the speaker. When aec is
+// non-nil and aec.Engine is set, mic audio is echo-cancelled against the speaker
+// output before reaching micOut. It blocks until ctx is cancelled or a device
+// errors.
 //
 // sel optionally pins the capture/playback devices (nil = system defaults).
 // When debug is set, the captured mic level is logged about once a second so
@@ -74,19 +77,16 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 	}
 
 	// Reusable scratch for converting callback buffers to int16 (AEC path).
+	// micScratch is touched only by the capture callback, refScratch only by the
+	// playback callback, so the two devices' threads never share scratch.
 	var micScratch, refScratch []int16
 
-	// Capture-level debug: peak over a ~1s window, logged from the callback.
+	// Capture-level debug: peak over a ~1s window, logged from the capture cb.
 	var dbgSamples int
 	var dbgPeak int16
 
-	onData := func(out, in []byte, frames uint32) {
-		// Playback: fill out from the player; pad with silence on underrun.
-		n := player.fill(out)
-		for i := n; i < len(out); i++ {
-			out[i] = 0
-		}
-
+	// Capture callback: mic frames -> AEC mic ring, or straight to micOut.
+	onCapture := func(_, in []byte, _ uint32) {
 		if len(in) == 0 {
 			return
 		}
@@ -110,9 +110,7 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 		}
 
 		if aecEnabled {
-			// Enqueue mic + reference (the exact bytes we just wrote to the
-			// speaker) for the worker. The worker cleans and forwards to
-			// micOut. Int16Ring.Write copies, so reusing scratch is safe.
+			// Int16Ring.Write copies, so reusing scratch is safe.
 			nm := len(in) / 2
 			if cap(micScratch) < nm {
 				micScratch = make([]int16, nm)
@@ -120,14 +118,6 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 			micScratch = micScratch[:nm]
 			bytesToS16Into(micScratch, in)
 			micRing.Write(micScratch)
-
-			nr := len(out) / 2
-			if cap(refScratch) < nr {
-				refScratch = make([]int16, nr)
-			}
-			refScratch = refScratch[:nr]
-			bytesToS16Into(refScratch, out)
-			refRing.Write(refScratch)
 			return
 		}
 
@@ -142,32 +132,61 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 		}
 	}
 
-	cfg := malgo.DefaultDeviceConfig(malgo.Duplex)
-	cfg.Capture.Format = malgo.FormatS16
-	cfg.Capture.Channels = 1
-	cfg.Playback.Format = malgo.FormatS16
-	cfg.Playback.Channels = 1
-	cfg.SampleRate = uint32(sampleRate)
-	cfg.Alsa.NoMMap = 1
+	// Playback callback: fill the speaker from the player (silence on underrun);
+	// feed the exact output as the AEC reference.
+	onPlayback := func(out, _ []byte, _ uint32) {
+		n := player.fill(out)
+		for i := n; i < len(out); i++ {
+			out[i] = 0
+		}
+		if aecEnabled {
+			nr := len(out) / 2
+			if cap(refScratch) < nr {
+				refScratch = make([]int16, nr)
+			}
+			refScratch = refScratch[:nr]
+			bytesToS16Into(refScratch, out)
+			refRing.Write(refScratch)
+		}
+	}
 
-	// Pin explicit devices when requested, bypassing the system "default" PCM.
+	// Capture device.
+	capCfg := malgo.DefaultDeviceConfig(malgo.Capture)
+	capCfg.Capture.Format = malgo.FormatS16
+	capCfg.Capture.Channels = 1
+	capCfg.SampleRate = uint32(sampleRate)
+	capCfg.Alsa.NoMMap = 1
 	if capDev != nil {
-		cfg.Capture.DeviceID = capDev.ID.Pointer()
+		capCfg.Capture.DeviceID = capDev.ID.Pointer()
 		log.Printf("audio: capture device = %q", capDev.Name())
 	}
+	capDevice, err := malgo.InitDevice(malgoCtx.Context, capCfg, malgo.DeviceCallbacks{Data: onCapture})
+	if err != nil {
+		return fmt.Errorf("init capture device: %w", err)
+	}
+	defer capDevice.Uninit()
+
+	// Playback device.
+	playCfg := malgo.DefaultDeviceConfig(malgo.Playback)
+	playCfg.Playback.Format = malgo.FormatS16
+	playCfg.Playback.Channels = 1
+	playCfg.SampleRate = uint32(sampleRate)
+	playCfg.Alsa.NoMMap = 1
 	if playDev != nil {
-		cfg.Playback.DeviceID = playDev.ID.Pointer()
+		playCfg.Playback.DeviceID = playDev.ID.Pointer()
 		log.Printf("audio: playback device = %q", playDev.Name())
 	}
-
-	device, err := malgo.InitDevice(malgoCtx.Context, cfg, malgo.DeviceCallbacks{Data: onData})
+	playDevice, err := malgo.InitDevice(malgoCtx.Context, playCfg, malgo.DeviceCallbacks{Data: onPlayback})
 	if err != nil {
-		return fmt.Errorf("init device: %w", err)
+		return fmt.Errorf("init playback device: %w", err)
 	}
-	defer device.Uninit()
+	defer playDevice.Uninit()
 
-	if err := device.Start(); err != nil {
-		return fmt.Errorf("start device: %w", err)
+	if err := capDevice.Start(); err != nil {
+		return fmt.Errorf("start capture device: %w", err)
+	}
+	if err := playDevice.Start(); err != nil {
+		return fmt.Errorf("start playback device: %w", err)
 	}
 
 	<-ctx.Done()
