@@ -68,3 +68,15 @@ func TestConnectAcrossServersOrdersByServer(t *testing.T) {
 		t.Fatalf("tool order = %v, want [alpha beta]", got)
 	}
 }
+
+func TestConnectMissingBinaryFailsFast(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cfg := Config{MCPServers: map[string]ServerSpec{
+		"x": {Command: "definitely-not-a-real-binary-xyz-12345"},
+	}}
+	if _, err := Connect(ctx, cfg); err == nil {
+		t.Fatal("expected error connecting to a missing binary")
+	}
+}

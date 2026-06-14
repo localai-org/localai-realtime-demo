@@ -3,6 +3,9 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"sort"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -84,4 +87,32 @@ func connect(ctx context.Context, servers []namedTransport) (*Bridge, error) {
 		}
 	}
 	return b, nil
+}
+
+// Connect starts every configured MCP server as a stdio subprocess, discovers
+// its tools, and returns a Bridge exposing them as realtime tools. Servers are
+// dialed in sorted-name order so tool ordering is deterministic across runs. Any
+// failure aborts and tears down already-started servers (fail fast). Call
+// Bridge.Close to stop the subprocesses.
+func Connect(ctx context.Context, cfg Config) (*Bridge, error) {
+	names := make([]string, 0, len(cfg.MCPServers))
+	for name := range cfg.MCPServers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	servers := make([]namedTransport, 0, len(names))
+	for _, name := range names {
+		spec := cfg.MCPServers[name]
+		cmd := exec.CommandContext(ctx, spec.Command, spec.Args...)
+		cmd.Env = os.Environ()
+		for k, v := range spec.Env {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		}
+		servers = append(servers, namedTransport{
+			name:      name,
+			transport: &sdk.CommandTransport{Command: cmd},
+		})
+	}
+	return connect(ctx, servers)
 }
