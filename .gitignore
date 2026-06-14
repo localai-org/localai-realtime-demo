@@ -4,3 +4,7 @@
 /.localvqe/
 *.wav
 .DS_Store
+
+# real deploy configs (only *.env.example is tracked)
+deploy/*.env
+!deploy/*.env.example
