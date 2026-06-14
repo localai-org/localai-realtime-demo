@@ -124,6 +124,38 @@ Each endpoint may use its own model and API key via `-fallback-model` /
 Implement `realtime.Tool` (see `tools/weather.go`) and `registry.Register(...)`
 it in `cmd/assistant/main.go`.
 
+## MCP servers (tools)
+
+By default the assistant registers a single mocked `get_weather` tool to
+demonstrate function calling. To give it real tools, point it at a set of
+[Model Context Protocol](https://modelcontextprotocol.io/) servers using the
+standard `mcpServers` JSON format (the same format published by
+[`mudler/mcps`](https://github.com/mudler/mcps)):
+
+```json
+{
+  "mcpServers": {
+    "weather": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "ghcr.io/mudler/mcps/weather:master"],
+      "env": { "API_KEY": "..." }
+    }
+  }
+}
+```
+
+Run the assistant with the config:
+
+```bash
+./assistant -model gpt-realtime -mcp-config mcp.json
+# or: ASSISTANT_MCP_CONFIG=mcp.json ./assistant -model gpt-realtime
+```
+
+When `-mcp-config` is set, the assistant connects to every listed server at
+startup, registers all of their tools, and does **not** register the
+`get_weather` example. Startup fails fast if a server can't be reached, the
+config lists no servers, or two servers expose a tool with the same name.
+
 ## Layout
 
 - `audio/` — malgo full-duplex device (mic in, speaker out)
