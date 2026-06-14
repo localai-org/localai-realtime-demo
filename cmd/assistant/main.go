@@ -68,7 +68,7 @@ func main() {
 		"You are a helpful voice assistant. Keep replies short and conversational."),
 		"system instructions")
 	mcpConfig := flag.String("mcp-config", env("ASSISTANT_MCP_CONFIG", ""),
-		"path to an mcpServers JSON file; when set, its tools replace the built-in get_weather example")
+		"path to an mcpServers JSON file; its servers' tools are exposed to the model")
 	sampleRate := flag.Int("sample-rate", 24000, "PCM sample rate (Hz)")
 	aecEnabled := flag.Bool("aec", envBool("AEC", true), "enable LocalVQE acoustic echo cancellation when a model is bundled into the binary")
 	aecDelayMs := flag.Int("aec-delay-ms", envInt("AEC_DELAY_MS", 50), "AEC reference delay in ms (speaker->mic acoustic path)")
@@ -126,8 +126,8 @@ func main() {
 		}()
 	}
 
-	// Tools. With -mcp-config the assistant's tools come from the configured MCP
-	// servers; otherwise it registers the built-in get_weather example.
+	// Tools come from the MCP servers in -mcp-config, if any; without it the
+	// assistant runs with no tools.
 	registry := realtime.NewRegistry()
 	cleanupTools, err := setupTools(ctx, *mcpConfig, registry)
 	if err != nil {

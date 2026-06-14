@@ -9,15 +9,15 @@ import (
 	"github.com/mudler/minimal-realtime-assistant/realtime"
 )
 
-func TestSetupToolsDefaultRegistersWeather(t *testing.T) {
+func TestSetupToolsNoConfigRegistersNothing(t *testing.T) {
 	reg := realtime.NewRegistry()
 	cleanup, err := setupTools(context.Background(), "", reg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cleanup()
-	if _, ok := reg.Get("get_weather"); !ok {
-		t.Fatal("expected get_weather to be registered by default")
+	if n := len(reg.ToolUnions()); n != 0 {
+		t.Fatalf("expected no tools without -mcp-config, got %d", n)
 	}
 }
 
