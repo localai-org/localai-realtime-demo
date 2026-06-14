@@ -23,8 +23,7 @@ func startEchoServer(t *testing.T, ctx context.Context, toolNames ...string) sdk
 	t.Helper()
 	serverT, clientT := sdk.NewInMemoryTransports()
 	server := sdk.NewServer(&sdk.Implementation{Name: "echo", Version: "v1"}, nil)
-	for _, n := range toolNames {
-		name := n
+	for _, name := range toolNames {
 		sdk.AddTool(server, &sdk.Tool{Name: name, Description: "echo tool " + name},
 			func(ctx context.Context, req *sdk.CallToolRequest, in echoArgs) (*sdk.CallToolResult, echoOut, error) {
 				return &sdk.CallToolResult{
@@ -32,6 +31,22 @@ func startEchoServer(t *testing.T, ctx context.Context, toolNames ...string) sdk
 				}, echoOut{}, nil
 			})
 	}
+	go func() { _ = server.Run(ctx, serverT) }()
+	return clientT
+}
+
+// startEmptyErrorServer runs an in-memory MCP server with one tool "silent"
+// that returns IsError with no content at all (no text), to exercise the
+// empty-error fallback. The Content field is set to a non-nil empty slice so
+// the SDK does not auto-populate it with the JSON of the typed output value.
+func startEmptyErrorServer(t *testing.T, ctx context.Context) sdk.Transport {
+	t.Helper()
+	serverT, clientT := sdk.NewInMemoryTransports()
+	server := sdk.NewServer(&sdk.Implementation{Name: "silent", Version: "v1"}, nil)
+	sdk.AddTool(server, &sdk.Tool{Name: "silent", Description: "errors with no message"},
+		func(ctx context.Context, req *sdk.CallToolRequest, in echoArgs) (*sdk.CallToolResult, echoOut, error) {
+			return &sdk.CallToolResult{IsError: true, Content: []sdk.Content{}}, echoOut{}, nil
+		})
 	go func() { _ = server.Run(ctx, serverT) }()
 	return clientT
 }

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -38,7 +39,10 @@ func (t *bridgedTool) Execute(ctx context.Context, argsJSON string) (string, err
 	}
 	text := contentText(res.Content)
 	if res.IsError {
-		return "", fmt.Errorf("%s", text)
+		if text == "" {
+			text = "tool " + t.name + " reported an error with no message"
+		}
+		return "", errors.New(text)
 	}
 	return text, nil
 }
