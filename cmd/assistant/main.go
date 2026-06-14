@@ -80,11 +80,12 @@ func main() {
 	audioCapture := flag.String("audio-capture", env("ASSISTANT_AUDIO_CAPTURE", ""), "capture device name substring (overrides -audio-device)")
 	audioPlayback := flag.String("audio-playback", env("ASSISTANT_AUDIO_PLAYBACK", ""), "playback device name substring (overrides -audio-device)")
 	listDevices := flag.Bool("list-audio-devices", false, "list available audio devices and exit")
-	debugAudio := flag.Bool("debug-audio", envBool("ASSISTANT_DEBUG_AUDIO", false), "log the captured mic level about once a second")
+	debugAudio := flag.Bool("debug-audio", envBool("ASSISTANT_DEBUG_AUDIO", false), "log the captured mic + playback level about once a second")
+	audioBackend := flag.String("audio-backend", env("ASSISTANT_AUDIO_BACKEND", ""), "force the audio backend: alsa|pulseaudio|jack (empty = auto)")
 	flag.Parse()
 
 	if *listDevices {
-		caps, plays, err := audio.ListDevices()
+		caps, plays, err := audio.ListDevices(*audioBackend)
 		if err != nil {
 			log.Fatalln("list audio devices:", err)
 		}
@@ -148,7 +149,7 @@ func main() {
 	audioDone := make(chan struct{})
 	go func() {
 		defer close(audioDone)
-		if err := audio.Duplex(ctx, *sampleRate, micOut, player, aecOpts, sel, *debugAudio); err != nil {
+		if err := audio.Duplex(ctx, *sampleRate, micOut, player, aecOpts, sel, *debugAudio, *audioBackend); err != nil {
 			log.Println("audio:", err)
 			cancel()
 		}

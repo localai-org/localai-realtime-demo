@@ -36,8 +36,8 @@ type AECOptions struct {
 // sel optionally pins the capture/playback devices (nil = system defaults).
 // When debug is set, the captured mic level is logged about once a second so
 // you can tell whether real audio is reaching the app.
-func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *Player, aec *AECOptions, sel *DeviceSelection, debug bool) error {
-	malgoCtx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(string) {})
+func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *Player, aec *AECOptions, sel *DeviceSelection, debug bool, backend string) error {
+	malgoCtx, err := malgo.InitContext(Backends(backend), malgo.ContextConfig{}, func(string) {})
 	if err != nil {
 		return fmt.Errorf("init audio context: %w", err)
 	}
@@ -132,12 +132,28 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 		}
 	}
 
+	// Playback-callback debug: count callback invocations and bytes actually
+	// drained from the player over a ~1s window. If "playback active" never logs,
+	// the device's callback isn't firing (e.g. a stuck PulseAudio playback stream).
+	var dbgPlayBytes, dbgPlayFilled, dbgPlayCalls int
+
 	// Playback callback: fill the speaker from the player (silence on underrun);
 	// feed the exact output as the AEC reference.
 	onPlayback := func(out, _ []byte, _ uint32) {
 		n := player.fill(out)
 		for i := n; i < len(out); i++ {
 			out[i] = 0
+		}
+
+		if debug {
+			dbgPlayCalls++
+			dbgPlayBytes += len(out)
+			dbgPlayFilled += n
+			if dbgPlayBytes >= sampleRate*2 {
+				log.Printf("audio: playback active, %d calls, drained %d/%d bytes from player",
+					dbgPlayCalls, dbgPlayFilled, dbgPlayBytes)
+				dbgPlayBytes, dbgPlayFilled, dbgPlayCalls = 0, 0, 0
+			}
 		}
 		if aecEnabled {
 			nr := len(out) / 2
