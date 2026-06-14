@@ -10,6 +10,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require github.com/coder/websocket v1.8.12 // indirect
+require (
+	github.com/coder/websocket v1.8.12 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.3.0 // indirect
+)
 
 replace github.com/WqyJh/go-openai-realtime/v2 => github.com/richiejp/go-openai-realtime/v2 v2.0.0-20260213113003-1b6db572709e
