@@ -55,7 +55,7 @@ var variants = []Variant{
 	{Accel: NvidiaCUDA13, Name: "nvidia-cuda-13", Label: "NVIDIA GPU (CUDA 13)", Image: imageRepo + ":" + imageTag + "-gpu-nvidia-cuda-13", DeviceStanza: nvidiaDeviceStanza},
 	{Accel: AMDROCm, Name: "amd-rocm", Label: "AMD GPU (ROCm / hipBLAS)", Image: imageRepo + ":" + imageTag + "-gpu-hipblas", DeviceStanza: amdDeviceStanza},
 	{Accel: IntelGPU, Name: "intel", Label: "Intel GPU (oneAPI)", Image: imageRepo + ":" + imageTag + "-gpu-intel", DeviceStanza: driDeviceStanza},
-	{Accel: Vulkan, Name: "vulkan", Label: "Vulkan (vendor-neutral GPU)", Image: imageRepo + ":" + imageTag + "-vulkan", DeviceStanza: driDeviceStanza},
+	{Accel: Vulkan, Name: "vulkan", Label: "Vulkan (vendor-neutral GPU)", Image: imageRepo + ":" + imageTag + "-gpu-vulkan", DeviceStanza: driDeviceStanza},
 	{Accel: AppleMetal, Name: "metal", Label: "Apple Metal (arm64; Docker GPU passthrough limited)", Image: imageRepo + ":" + imageTag + "-metal-darwin-arm64"},
 	{Accel: NvidiaJetson, Name: "jetson", Label: "NVIDIA Jetson / L4T (arm64)", Image: imageRepo + ":" + imageTag + "-nvidia-l4t-arm64", DeviceStanza: nvidiaDeviceStanza},
 }

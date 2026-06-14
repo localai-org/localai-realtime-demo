@@ -18,7 +18,7 @@
 services:
   localai:
     # Image variant picked for this host's accelerator by 'assistant setup'.
-    image: localai/localai:master-vulkan
+    image: localai/localai:master-gpu-vulkan
     container_name: localai-realtime
     ports:
       # Host port is overridable (LOCALAI_PORT) for when 8080 is already taken;

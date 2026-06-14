@@ -118,7 +118,7 @@ func TestRenderComposeContent(t *testing.T) {
 				t.Errorf("%s should expose /dev/dri only", name)
 			}
 		}
-		if !strings.Contains(mustRender(t, "vulkan", "gemma-4-e2b-it-qat-q4_0", "kokoros"), "image: localai/localai:master-vulkan\n") {
+		if !strings.Contains(mustRender(t, "vulkan", "gemma-4-e2b-it-qat-q4_0", "kokoros"), "image: localai/localai:master-gpu-vulkan\n") {
 			t.Error("vulkan image tag missing")
 		}
 	})
