@@ -3,6 +3,7 @@ package audio
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/gen2brain/malgo"
 )
@@ -28,7 +29,11 @@ type AECOptions struct {
 // When aec is non-nil and aec.Engine is set, mic audio is echo-cancelled
 // against the speaker output before reaching micOut. It blocks until ctx is
 // cancelled or the device errors.
-func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *Player, aec *AECOptions) error {
+//
+// sel optionally pins the capture/playback devices (nil = system defaults).
+// When debug is set, the captured mic level is logged about once a second so
+// you can tell whether real audio is reaching the app.
+func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *Player, aec *AECOptions, sel *DeviceSelection, debug bool) error {
 	malgoCtx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(string) {})
 	if err != nil {
 		return fmt.Errorf("init audio context: %w", err)
@@ -37,6 +42,13 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 		_ = malgoCtx.Uninit()
 		malgoCtx.Free()
 	}()
+
+	// Resolve explicit devices before building the config; capDev/playDev must
+	// stay alive until InitDevice consumes their IDs below.
+	capDev, playDev, err := resolveDevices(malgoCtx.Context, sel)
+	if err != nil {
+		return err
+	}
 
 	// AEC wiring (playback-ref + off-thread worker). Nil-safe.
 	aecEnabled := aec != nil && aec.Engine != nil
@@ -64,6 +76,10 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 	// Reusable scratch for converting callback buffers to int16 (AEC path).
 	var micScratch, refScratch []int16
 
+	// Capture-level debug: peak over a ~1s window, logged from the callback.
+	var dbgSamples int
+	var dbgPeak int16
+
 	onData := func(out, in []byte, frames uint32) {
 		// Playback: fill out from the player; pad with silence on underrun.
 		n := player.fill(out)
@@ -73,6 +89,24 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 
 		if len(in) == 0 {
 			return
+		}
+
+		if debug {
+			for i := 0; i+1 < len(in); i += 2 {
+				s := int16(in[i]) | int16(in[i+1])<<8
+				if s < 0 {
+					s = -s
+				}
+				if s > dbgPeak {
+					dbgPeak = s
+				}
+			}
+			dbgSamples += len(in) / 2
+			if dbgSamples >= sampleRate {
+				log.Printf("audio: capture active, peak=%d (%.1f%%) over %d samples",
+					dbgPeak, float64(dbgPeak)/327.67, dbgSamples)
+				dbgSamples, dbgPeak = 0, 0
+			}
 		}
 
 		if aecEnabled {
@@ -115,6 +149,16 @@ func Duplex(ctx context.Context, sampleRate int, micOut chan<- []byte, player *P
 	cfg.Playback.Channels = 1
 	cfg.SampleRate = uint32(sampleRate)
 	cfg.Alsa.NoMMap = 1
+
+	// Pin explicit devices when requested, bypassing the system "default" PCM.
+	if capDev != nil {
+		cfg.Capture.DeviceID = capDev.ID.Pointer()
+		log.Printf("audio: capture device = %q", capDev.Name())
+	}
+	if playDev != nil {
+		cfg.Playback.DeviceID = playDev.ID.Pointer()
+		log.Printf("audio: playback device = %q", playDev.Name())
+	}
 
 	device, err := malgo.InitDevice(malgoCtx.Context, cfg, malgo.DeviceCallbacks{Data: onData})
 	if err != nil {
