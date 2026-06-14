@@ -122,7 +122,8 @@ Each endpoint may use its own model and API key via `-fallback-model` /
 ## Adding a tool
 
 Implement `realtime.Tool` (see `tools/weather.go`) and `registry.Register(...)`
-it in `cmd/assistant/main.go`.
+it in `cmd/assistant/tools_setup.go`. To add tools without writing Go, point the
+assistant at MCP servers instead — see [MCP servers (tools)](#mcp-servers-tools).
 
 ## MCP servers (tools)
 
