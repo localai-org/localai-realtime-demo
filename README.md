@@ -2,7 +2,8 @@
 
 A tiny Go client for [LocalAI](https://localai.io)'s realtime (WebSocket) API.
 It runs a full voice conversation — you talk into the mic, the model talks back
-through the speaker — and includes one example tool call (`get_weather`).
+through the speaker — and can call tools you expose over
+[MCP](#mcp-servers-tools).
 
 Inspired by [VoxInput](https://github.com/richiejp/VoxInput), reduced to just the
 realtime conversation loop.
@@ -80,9 +81,9 @@ CGO_ENABLED=1 go build -o assistant ./cmd/assistant
   -model gpt-realtime
 ```
 
-Then just speak. Server-side VAD detects when you start and stop talking. Ask
-"what's the weather in Paris?" to trigger the `get_weather` tool — the model
-calls the tool, gets canned data back, and speaks the result.
+Then just speak. Server-side VAD detects when you start and stop talking. With
+no tools configured the assistant just converses; wire up
+[MCP servers](#mcp-servers-tools) to let the model call tools mid-conversation.
 
 ## Configuration
 
@@ -121,14 +122,47 @@ Each endpoint may use its own model and API key via `-fallback-model` /
 
 ## Adding a tool
 
-Implement `realtime.Tool` (see `tools/weather.go`) and `registry.Register(...)`
-it in `cmd/assistant/main.go`.
+The assistant has no built-in tools — give it some by pointing it at one or more
+[MCP servers](#mcp-servers-tools) (no Go required). To add a native tool in Go
+instead, implement the `realtime.Tool` interface (see `realtime/tool.go`) and
+`registry.Register(...)` it in `cmd/assistant/tools_setup.go`.
+
+## MCP servers (tools)
+
+Give the assistant tools by pointing it at a set of
+[Model Context Protocol](https://modelcontextprotocol.io/) servers using the
+standard `mcpServers` JSON format (the same format published by
+[`mudler/mcps`](https://github.com/mudler/mcps)):
+
+```json
+{
+  "mcpServers": {
+    "weather": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "ghcr.io/mudler/mcps/weather:master"],
+      "env": { "API_KEY": "..." }
+    }
+  }
+}
+```
+
+Run the assistant with the config:
+
+```bash
+./assistant -model gpt-realtime -mcp-config mcp.json
+# or: ASSISTANT_MCP_CONFIG=mcp.json ./assistant -model gpt-realtime
+```
+
+When `-mcp-config` is set, the assistant connects to every listed server at
+startup and registers all of their tools. Startup fails fast if a server can't
+be reached, the config lists no servers, or two servers expose a tool with the
+same name. Without `-mcp-config` the assistant runs with no tools.
 
 ## Layout
 
 - `audio/` — malgo full-duplex device (mic in, speaker out)
 - `realtime/` — WebSocket client, session setup, event loop, tool registry
-- `tools/` — the `get_weather` example
+- `mcp/` — connects to MCP servers and bridges their tools to the registry
 - `cmd/assistant/` — CLI entry point
 
 ## Echo cancellation (optional)

@@ -14,7 +14,6 @@ import (
 	"github.com/mudler/minimal-realtime-assistant/audio"
 	"github.com/mudler/minimal-realtime-assistant/internal/localvqe"
 	"github.com/mudler/minimal-realtime-assistant/realtime"
-	"github.com/mudler/minimal-realtime-assistant/tools"
 )
 
 // Compile-time guard: the purego binding must satisfy the AEC engine interface.
@@ -66,8 +65,10 @@ func main() {
 	voice := flag.String("voice", env("ASSISTANT_VOICE", ""), "TTS voice (empty = server default)")
 	language := flag.String("language", env("ASSISTANT_LANGUAGE", ""), "input audio language as ISO-639-1, e.g. en/it (empty = auto-detect)")
 	instructions := flag.String("instructions", env("ASSISTANT_INSTRUCTIONS",
-		"You are a helpful voice assistant. Keep replies short and conversational. Use the get_weather tool when the user asks about the weather."),
+		"You are a helpful voice assistant. Keep replies short and conversational."),
 		"system instructions")
+	mcpConfig := flag.String("mcp-config", env("ASSISTANT_MCP_CONFIG", ""),
+		"path to an mcpServers JSON file; its servers' tools are exposed to the model")
 	sampleRate := flag.Int("sample-rate", 24000, "PCM sample rate (Hz)")
 	aecEnabled := flag.Bool("aec", envBool("AEC", true), "enable LocalVQE acoustic echo cancellation when a model is bundled into the binary")
 	aecDelayMs := flag.Int("aec-delay-ms", envInt("AEC_DELAY_MS", 50), "AEC reference delay in ms (speaker->mic acoustic path)")
@@ -125,13 +126,18 @@ func main() {
 		}()
 	}
 
-	// Tools.
+	// Tools come from the MCP servers in -mcp-config, if any; without it the
+	// assistant runs with no tools.
 	registry := realtime.NewRegistry()
-	weather, err := tools.NewWeather()
+	cleanupTools, err := setupTools(ctx, *mcpConfig, registry)
 	if err != nil {
-		log.Fatalln("init weather tool:", err)
+		log.Fatalln("tools:", err)
 	}
-	registry.Register(weather)
+	defer func() {
+		if err := cleanupTools(); err != nil {
+			log.Println("tools cleanup:", err)
+		}
+	}()
 
 	// Endpoints: primary first, then fallback. Failover walks this list from the
 	// top on every (re)connect, which also gives automatic fail-back to primary.
