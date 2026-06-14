@@ -142,6 +142,14 @@ func TestRenderComposeContent(t *testing.T) {
 			t.Error("jetson should use the nvidia stanza")
 		}
 	})
+
+	t.Run("warms the pipeline models via LOAD_TO_MEMORY", func(t *testing.T) {
+		out := mustRender(t, "cpu", "gemma-4-e2b-it-qat-q4_0", "vits-piper-it_IT-paola-sherpa")
+		want := "      - LOAD_TO_MEMORY=" + VADModel + "," + TranscriptionModel + ",gemma-4-e2b-it-qat-q4_0,vits-piper-it_IT-paola-sherpa\n"
+		if !strings.Contains(out, want) {
+			t.Errorf("LOAD_TO_MEMORY warmup line wrong; want:\n%s\ngot:\n%s", want, out)
+		}
+	})
 }
 
 func TestRenderComposeDeterministic(t *testing.T) {

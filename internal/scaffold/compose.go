@@ -78,6 +78,12 @@ services:
     environment:
       # Set DEBUG=true to watch model loading in detail.
       - DEBUG=false
+      # Warm the pipeline sub-models into memory at startup (loaded sequentially)
+      # so the first realtime turn doesn't pay a cold load — which on small hosts
+      # can spike memory and crash a backend mid-conversation. They then stay
+      # resident (watchdog-idle is off by default). Same models as the install
+      # list below.
+      - LOAD_TO_MEMORY={{.VAD}},{{.Transcription}},{{.LLM}},{{.TTS}}
     volumes:
       # The pipeline config (gpt-realtime.yaml) lives here; the gallery-installed
       # sub-model configs and their weights are cached here too (git-ignored).
