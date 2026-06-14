@@ -37,6 +37,15 @@ func envInt(key string, def int) int {
 	return def
 }
 
+func envDuration(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return def
+}
+
 func envBool(key string, def bool) bool {
 	v := os.Getenv(key)
 	switch v {
@@ -83,6 +92,7 @@ func main() {
 	listDevices := flag.Bool("list-audio-devices", false, "list available audio devices and exit")
 	debugAudio := flag.Bool("debug-audio", envBool("ASSISTANT_DEBUG_AUDIO", false), "log the captured mic + playback level about once a second")
 	audioBackend := flag.String("audio-backend", env("ASSISTANT_AUDIO_BACKEND", ""), "force the audio backend: alsa|pulseaudio|jack (empty = auto)")
+	idleReset := flag.Duration("idle-reset", envDuration("ASSISTANT_IDLE_RESET", 0), "reset the conversation after this long with no activity, e.g. 5m (0 = never)")
 	flag.Parse()
 
 	if *listDevices {
@@ -228,6 +238,7 @@ func main() {
 				Language:     *language,
 				SampleRate:   *sampleRate,
 				Timeout:      30 * time.Second,
+				IdleReset:    *idleReset,
 			}, registry, player)
 			if err := client.Connect(ctx); err != nil {
 				return nil, err
