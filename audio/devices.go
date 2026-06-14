@@ -60,11 +60,30 @@ func pickDevice(names []string, query string) (int, error) {
 	}
 }
 
+// Backends maps a human backend name to the malgo backend list passed to
+// InitContext. An empty/unknown name returns nil, which lets miniaudio pick
+// automatically. Forcing a backend (e.g. "alsa") is the escape hatch when the
+// auto-selected one misbehaves — notably miniaudio's PulseAudio playback, which
+// can leave the device in a permanent XRUN on some PipeWire setups.
+func Backends(name string) []malgo.Backend {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "alsa":
+		return []malgo.Backend{malgo.BackendAlsa}
+	case "pulse", "pulseaudio":
+		return []malgo.Backend{malgo.BackendPulseaudio}
+	case "jack":
+		return []malgo.Backend{malgo.BackendJack}
+	default:
+		return nil
+	}
+}
+
 // ListDevices enumerates the capture and playback devices the backend can see.
 // It is used by the -list-audio-devices flag so users can discover the exact
-// names to pass for device selection.
-func ListDevices() (capture, playback []DeviceName, err error) {
-	mctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(string) {})
+// names to pass for device selection. backend optionally forces a specific
+// audio backend (see Backends); empty means auto.
+func ListDevices(backend string) (capture, playback []DeviceName, err error) {
+	mctx, err := malgo.InitContext(Backends(backend), malgo.ContextConfig{}, func(string) {})
 	if err != nil {
 		return nil, nil, fmt.Errorf("init audio context: %w", err)
 	}
