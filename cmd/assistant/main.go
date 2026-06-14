@@ -133,7 +133,11 @@ func main() {
 	if err != nil {
 		log.Fatalln("tools:", err)
 	}
-	defer cleanupTools()
+	defer func() {
+		if err := cleanupTools(); err != nil {
+			log.Println("tools cleanup:", err)
+		}
+	}()
 
 	// Endpoints: primary first, then fallback. Failover walks this list from the
 	// top on every (re)connect, which also gives automatic fail-back to primary.
