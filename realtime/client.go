@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	openairt "github.com/WqyJh/go-openai-realtime/v2"
@@ -21,6 +22,10 @@ type Config struct {
 	Language     string // ISO-639-1 input-audio language (empty = server auto-detect)
 	SampleRate   int
 	Timeout      time.Duration
+	// IdleReset ends the session after this long with no server activity (no
+	// speech, transcription, or response), so the Supervisor reconnects with a
+	// fresh server-side conversation. 0 disables it (keep one session forever).
+	IdleReset time.Duration
 }
 
 // Player consumes assistant playback audio. Write appends decoded PCM; Flush
@@ -161,8 +166,21 @@ func (c *Client) SendAudio(ctx context.Context, pcm []byte) error {
 // Run reads server events until the context is cancelled or the connection
 // fails permanently.
 func (c *Client) Run(ctx context.Context) error {
+	// Idle reset: read against a derived context the watchdog cancels after
+	// IdleReset of no server activity, ending the session so the Supervisor
+	// reconnects with a fresh conversation.
+	runCtx := ctx
+	var lastActivity atomic.Int64
+	if c.cfg.IdleReset > 0 {
+		lastActivity.Store(time.Now().UnixNano())
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		go c.idleWatch(runCtx, &lastActivity, cancel)
+	}
+
 	for {
-		msg, err := c.conn.ReadMessage(ctx)
+		msg, err := c.conn.ReadMessage(runCtx)
 		if err != nil {
 			var permanent *openairt.PermanentError
 			if errors.As(err, &permanent) {
@@ -171,8 +189,18 @@ func (c *Client) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+			if runCtx.Err() != nil {
+				// Idle watchdog fired: a clean end so the Supervisor reconnects.
+				return nil
+			}
 			log.Println("realtime: read error, retrying:", err)
 			continue
+		}
+
+		// Any server event counts as activity (user speech, transcription, or an
+		// in-progress response), so we only reset when the line is truly quiet.
+		if c.cfg.IdleReset > 0 {
+			lastActivity.Store(time.Now().UnixNano())
 		}
 
 		switch msg.ServerEventType() {
@@ -208,6 +236,30 @@ func (c *Client) Run(ctx context.Context) error {
 		case openairt.ServerEventTypeError:
 			if ev, ok := msg.(openairt.ErrorEvent); ok {
 				log.Println("realtime: server error:", ev.Error.Message)
+			}
+		}
+	}
+}
+
+// idleWatch cancels the run context once no server activity has been seen for
+// IdleReset, ending the session so the Supervisor reconnects with a fresh
+// conversation. It exits when ctx is cancelled (session ended for any reason).
+func (c *Client) idleWatch(ctx context.Context, last *atomic.Int64, reset context.CancelFunc) {
+	interval := c.cfg.IdleReset / 3
+	if interval < time.Second {
+		interval = time.Second
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if time.Since(time.Unix(0, last.Load())) >= c.cfg.IdleReset {
+				log.Printf("realtime: no activity for %s — resetting conversation", c.cfg.IdleReset)
+				reset()
+				return
 			}
 		}
 	}
