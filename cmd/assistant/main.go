@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -75,7 +76,43 @@ func main() {
 	fallbackWSURL := flag.String("fallback-ws-url", env("FALLBACK_WS_BASE_URL", "ws://localhost:8080/v1/realtime"), "fallback LocalAI realtime WebSocket URL")
 	fallbackModel := flag.String("fallback-model", env("FALLBACK_MODEL", ""), "fallback realtime model (empty = same as -model)")
 	fallbackAPIKey := flag.String("fallback-api-key", env("FALLBACK_API_KEY", ""), "fallback API key (empty = same as -api-key)")
+	audioDevice := flag.String("audio-device", env("ASSISTANT_AUDIO_DEVICE", ""), "capture+playback device name substring (empty = system default)")
+	audioCapture := flag.String("audio-capture", env("ASSISTANT_AUDIO_CAPTURE", ""), "capture device name substring (overrides -audio-device)")
+	audioPlayback := flag.String("audio-playback", env("ASSISTANT_AUDIO_PLAYBACK", ""), "playback device name substring (overrides -audio-device)")
+	listDevices := flag.Bool("list-audio-devices", false, "list available audio devices and exit")
+	debugAudio := flag.Bool("debug-audio", envBool("ASSISTANT_DEBUG_AUDIO", false), "log the captured mic level about once a second")
 	flag.Parse()
+
+	if *listDevices {
+		caps, plays, err := audio.ListDevices()
+		if err != nil {
+			log.Fatalln("list audio devices:", err)
+		}
+		fmt.Println("Capture devices (* = default):")
+		for _, d := range caps {
+			mark := " "
+			if d.IsDefault {
+				mark = "*"
+			}
+			fmt.Printf("  %s %s\n", mark, d.Name)
+		}
+		fmt.Println("Playback devices (* = default):")
+		for _, d := range plays {
+			mark := " "
+			if d.IsDefault {
+				mark = "*"
+			}
+			fmt.Printf("  %s %s\n", mark, d.Name)
+		}
+		return
+	}
+
+	// Capture/playback device selection. A per-direction flag overrides the
+	// shared -audio-device (handy for one USB speakerphone that does both).
+	sel := &audio.DeviceSelection{
+		Capture:  orDefault(*audioCapture, *audioDevice),
+		Playback: orDefault(*audioPlayback, *audioDevice),
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -111,7 +148,7 @@ func main() {
 	audioDone := make(chan struct{})
 	go func() {
 		defer close(audioDone)
-		if err := audio.Duplex(ctx, *sampleRate, micOut, player, aecOpts); err != nil {
+		if err := audio.Duplex(ctx, *sampleRate, micOut, player, aecOpts, sel, *debugAudio); err != nil {
 			log.Println("audio:", err)
 			cancel()
 		}
