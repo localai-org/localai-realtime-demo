@@ -26,6 +26,14 @@ type Config struct {
 	// speech, transcription, or response), so the Supervisor reconnects with a
 	// fresh server-side conversation. 0 disables it (keep one session forever).
 	IdleReset time.Duration
+	// PingInterval is how often a WebSocket ping is sent to detect a dead link.
+	// A silently-dropped network (interface down, no TCP FIN/RST) never surfaces
+	// a read error on its own; a ping with no pong within PingTimeout does, so
+	// the session ends and the Supervisor fails over. 0 disables the keepalive.
+	PingInterval time.Duration
+	// PingTimeout bounds how long each keepalive ping waits for its pong before
+	// the link is considered dead. Only used when PingInterval > 0.
+	PingTimeout time.Duration
 }
 
 // Player consumes assistant playback audio. Write appends decoded PCM; Flush
@@ -166,17 +174,26 @@ func (c *Client) SendAudio(ctx context.Context, pcm []byte) error {
 // Run reads server events until the context is cancelled or the connection
 // fails permanently.
 func (c *Client) Run(ctx context.Context) error {
-	// Idle reset: read against a derived context the watchdog cancels after
-	// IdleReset of no server activity, ending the session so the Supervisor
-	// reconnects with a fresh conversation.
-	runCtx := ctx
+	// Watchdogs run the read loop against a derived context they can cancel to
+	// end the session cleanly so the Supervisor reconnects:
+	//   - idle reset: after IdleReset of no server activity (fresh conversation).
+	//   - keepalive: when a ping gets no pong, i.e. the link died silently.
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	var lastActivity atomic.Int64
 	if c.cfg.IdleReset > 0 {
 		lastActivity.Store(time.Now().UnixNano())
-		var cancel context.CancelFunc
-		runCtx, cancel = context.WithCancel(ctx)
-		defer cancel()
 		go c.idleWatch(runCtx, &lastActivity, cancel)
+	}
+
+	if c.cfg.PingInterval > 0 {
+		go func() {
+			if err := keepalive(runCtx, c.conn, c.cfg.PingInterval, c.cfg.PingTimeout); err != nil {
+				log.Printf("realtime: %v — ending session to reconnect", err)
+				cancel()
+			}
+		}()
 	}
 
 	for {
@@ -190,7 +207,8 @@ func (c *Client) Run(ctx context.Context) error {
 				return ctx.Err()
 			}
 			if runCtx.Err() != nil {
-				// Idle watchdog fired: a clean end so the Supervisor reconnects.
+				// A watchdog (idle reset or keepalive) fired: a clean end so the
+				// Supervisor reconnects.
 				return nil
 			}
 			log.Println("realtime: read error, retrying:", err)

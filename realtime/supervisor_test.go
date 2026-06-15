@@ -52,7 +52,7 @@ func TestSupervisorFailsOverToFallback(t *testing.T) {
 			}
 			return blockingSession{}, nil
 		},
-		OnConnect: func(s Session) { connected <- s },
+		OnConnect: func(s Session, _ *Endpoint) { connected <- s },
 		Backoff:   BackoffPolicy{Min: time.Second, Max: 30 * time.Second},
 	}
 
@@ -77,6 +77,35 @@ func TestSupervisorFailsOverToFallback(t *testing.T) {
 	}
 }
 
+func TestSupervisorOnConnectReceivesEndpoint(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	got := make(chan string, 1)
+	sup := &Supervisor{
+		Endpoints: twoEndpoints(),
+		Dial: func(_ context.Context, _ Endpoint) (Session, error) {
+			return blockingSession{}, nil // primary connects and stays up
+		},
+		OnConnect: func(_ Session, ep *Endpoint) { got <- ep.Name },
+		Backoff:   BackoffPolicy{Min: time.Second, Max: 30 * time.Second},
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- sup.Run(ctx) }()
+
+	select {
+	case name := <-got:
+		if name != "primary" {
+			t.Fatalf("OnConnect endpoint = %q, want primary", name)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("OnConnect never fired")
+	}
+	cancel()
+	<-done
+}
+
 func TestSupervisorFirstConnectPlaysNoTone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -92,7 +121,7 @@ func TestSupervisorFirstConnectPlaysNoTone(t *testing.T) {
 			}
 			return nil, errors.New("unused")
 		},
-		OnConnect: func(s Session) { connected <- s },
+		OnConnect: func(s Session, _ *Endpoint) { connected <- s },
 		OnSwitch: func(from, to *Endpoint) {
 			f := ""
 			if from != nil {
