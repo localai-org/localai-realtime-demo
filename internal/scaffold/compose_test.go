@@ -143,6 +143,16 @@ func TestRenderComposeContent(t *testing.T) {
 		}
 	})
 
+	t.Run("uses host networking so the loopback endpoint survives networking-off", func(t *testing.T) {
+		out := mustRender(t, "cpu", "gemma-4-e2b-it-qat-q4_0", "vits-piper-it_IT-paola-sherpa")
+		if !strings.Contains(out, "network_mode: host\n") {
+			t.Error("compose must use network_mode: host (loopback survives `networking off`)")
+		}
+		if strings.Contains(out, "ports:") || strings.Contains(out, "8080:8080") {
+			t.Error("compose must not publish a bridged port; host networking serves localhost:8080 directly")
+		}
+	})
+
 	t.Run("warms the pipeline models via LOAD_TO_MEMORY", func(t *testing.T) {
 		out := mustRender(t, "cpu", "gemma-4-e2b-it-qat-q4_0", "vits-piper-it_IT-paola-sherpa")
 		want := "      - LOAD_TO_MEMORY=" + VADModel + "," + TranscriptionModel + ",gemma-4-e2b-it-qat-q4_0,vits-piper-it_IT-paola-sherpa\n"
