@@ -45,9 +45,11 @@ type Supervisor struct {
 	Endpoints []Endpoint
 	Dial      Dialer
 
-	// OnConnect is called with the live session on every successful connection
-	// so the caller can route mic audio to it. Optional.
-	OnConnect func(Session)
+	// OnConnect is called with the live session and the endpoint it connected to
+	// on every successful connection, so the caller can route mic audio to it and
+	// play an endpoint-specific cue (e.g. a tone telling you which brain you are
+	// on). Optional.
+	OnConnect func(Session, *Endpoint)
 	// OnSwitch is called only when the connected endpoint changes (never on the
 	// first connection, where there is nothing to switch from). from is non-nil.
 	// Optional.
@@ -108,7 +110,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			}
 			lastIdx = i
 			if s.OnConnect != nil {
-				s.OnConnect(sess)
+				s.OnConnect(sess, &s.Endpoints[i])
 			}
 
 			rerr := sess.Run(ctx)
