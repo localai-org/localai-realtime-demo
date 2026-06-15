@@ -93,6 +93,8 @@ func main() {
 	debugAudio := flag.Bool("debug-audio", envBool("ASSISTANT_DEBUG_AUDIO", false), "log the captured mic + playback level about once a second")
 	audioBackend := flag.String("audio-backend", env("ASSISTANT_AUDIO_BACKEND", ""), "force the audio backend: alsa|pulseaudio|jack (empty = auto)")
 	idleReset := flag.Duration("idle-reset", envDuration("ASSISTANT_IDLE_RESET", 0), "reset the conversation after this long with no activity, e.g. 5m (0 = never)")
+	pingInterval := flag.Duration("ping-interval", envDuration("ASSISTANT_PING_INTERVAL", 10*time.Second), "WebSocket keepalive ping interval; detects a dropped network so failover can fire (0 = disable)")
+	pingTimeout := flag.Duration("ping-timeout", envDuration("ASSISTANT_PING_TIMEOUT", 5*time.Second), "how long each keepalive ping waits for a pong before the link is considered dead")
 	flag.Parse()
 
 	if *listDevices {
@@ -165,6 +167,12 @@ func main() {
 			cancel()
 		}
 	}()
+
+	// Boot "I'm alive" chime: a stepped two-note rising blip, audibly distinct
+	// from the endpoint sweeps. Queued to the player as soon as the speaker is up,
+	// so it plays even with no network and before any brain connects. The player
+	// buffers it until the device starts draining.
+	player.Write(audio.Chime(*sampleRate, []float64{660, 990}, 110*time.Millisecond))
 	// Free the LocalVQE engine only after Duplex (and its AEC worker) have
 	// stopped, so a worker mid-drain can never touch a freed context on exit.
 	if aecEngine != nil {
@@ -239,6 +247,8 @@ func main() {
 				SampleRate:   *sampleRate,
 				Timeout:      30 * time.Second,
 				IdleReset:    *idleReset,
+				PingInterval: *pingInterval,
+				PingTimeout:  *pingTimeout,
 			}, registry, player)
 			if err := client.Connect(ctx); err != nil {
 				return nil, err
@@ -246,15 +256,14 @@ func main() {
 			log.Printf("connected to %s (%s)", ep.WSURL, ep.Name)
 			return client, nil
 		},
-		OnConnect: func(s realtime.Session) {
+		OnConnect: func(s realtime.Session, ep *realtime.Endpoint) {
 			curMu.Lock()
 			cur = s
 			curMu.Unlock()
-		},
-		OnSwitch: func(from, to *realtime.Endpoint) {
-			// Ascending sweep when moving toward the primary (lower index),
-			// descending toward the fallback. from is non-nil here.
-			if endpointIndex(endpoints, to) < endpointIndex(endpoints, from) {
+			// Tell you which brain you are on, on every (re)connect — including the
+			// first and after a failover: an ascending sweep for the primary, a
+			// descending one for the fallback. Distinct from the boot chime.
+			if endpointIndex(endpoints, ep) == 0 {
 				player.Write(audio.ToneSweep(*sampleRate, 440, 660, 200*time.Millisecond))
 			} else {
 				player.Write(audio.ToneSweep(*sampleRate, 660, 440, 200*time.Millisecond))
