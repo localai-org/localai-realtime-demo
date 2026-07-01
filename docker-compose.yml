@@ -29,6 +29,7 @@ services:
     environment:
       # Set DEBUG=true to watch model loading in detail.
       - DEBUG=false
+      - LOAD_TO_MEMORY=silero-vad-ggml,parakeet-cpp-tdt-0.6b-v3,gemma-4-e2b-it-qat-q4_0,vits-piper-it_IT-paola-sherpa,rfdetr-cpp-nano,depth-anything-2-metric-hypersim-base
     volumes:
       # The pipeline config (gpt-realtime.yaml) lives here; the gallery-installed
       # sub-model configs and their weights are cached here too (git-ignored).
@@ -46,6 +47,8 @@ services:
       - parakeet-cpp-tdt-0.6b-v3
       - gemma-4-e2b-it-qat-q4_0
       - vits-piper-it_IT-paola-sherpa
+      - rfdetr-cpp-nano
+      - depth-anything-2-metric-hypersim-base
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
       interval: 15s
